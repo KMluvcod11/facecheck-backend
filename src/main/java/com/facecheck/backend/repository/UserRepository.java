@@ -8,4 +8,7 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, UUID> {
     // ให้ Spring Boot สร้างคำสั่งค้นหา User จาก Email ให้อัตโนมัติ (ใช้ตอน Login)
     Optional<User> findByEmail(String email);
+
+    // เพิ่มบรรทัดนี้ เพื่อให้ค้นหาด้วย รหัสนักศึกษา ได้
+    Optional<User> findByStudentId(String studentId);
 }
