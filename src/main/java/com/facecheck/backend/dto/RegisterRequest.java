@@ -10,5 +10,5 @@ public class RegisterRequest {
     private String fullName;
     private String studentId;
     private String role;
-    private List<Double> faceDescriptor; // รับชุดตัวเลข 128 ตัวจาก React
+    private List<List<Double>> faceDescriptor;
 }
