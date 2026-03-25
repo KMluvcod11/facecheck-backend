@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.transaction.Transactional;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/class-students")
@@ -36,8 +35,8 @@ public class ClassStudentController {
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
                 Map<String, Object> studentData = new HashMap<>();
-                studentData.put("id", cs.getId());               // id ของ class_students row
-                studentData.put("studentUserId", user.getId());    // UUID ของ user
+                studentData.put("id", cs.getId()); // id ของ class_students row
+                studentData.put("studentUserId", user.getId()); // UUID ของ user
                 studentData.put("studentId", user.getStudentId()); // รหัสนักศึกษา เช่น 2310511010014
                 studentData.put("name", user.getFullName());
                 studentData.put("email", user.getEmail());
