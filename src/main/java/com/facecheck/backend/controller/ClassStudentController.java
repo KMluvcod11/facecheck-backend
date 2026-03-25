@@ -1,0 +1,120 @@
+package com.facecheck.backend.controller;
+
+import com.facecheck.backend.entity.ClassStudent;
+import com.facecheck.backend.entity.User;
+import com.facecheck.backend.repository.ClassStudentRepository;
+import com.facecheck.backend.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import jakarta.transaction.Transactional;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/class-students")
+public class ClassStudentController {
+
+    @Autowired
+    private ClassStudentRepository classStudentRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    // ==========================================
+    // GET /api/class-students/{classId} — ดึงรายชื่อนักศึกษาในคลาส
+    // ==========================================
+    @GetMapping("/{classId}")
+    public ResponseEntity<?> getStudentsByClass(@PathVariable UUID classId) {
+        List<ClassStudent> classStudents = classStudentRepository.findByClassId(classId);
+
+        // ดึงข้อมูล User ของแต่ละ studentId
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ClassStudent cs : classStudents) {
+            var userOpt = userRepository.findById(cs.getStudentId());
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                Map<String, Object> studentData = new HashMap<>();
+                studentData.put("id", cs.getId());               // id ของ class_students row
+                studentData.put("studentUserId", user.getId());    // UUID ของ user
+                studentData.put("studentId", user.getStudentId()); // รหัสนักศึกษา เช่น 2310511010014
+                studentData.put("name", user.getFullName());
+                studentData.put("email", user.getEmail());
+                result.add(studentData);
+            }
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    // ==========================================
+    // POST /api/class-students — เพิ่มนักศึกษาเข้าคลาส (ด้วยรหัสนักศึกษา)
+    // ==========================================
+    @PostMapping
+    public ResponseEntity<?> addStudentToClass(@RequestBody Map<String, String> request) {
+        try {
+            UUID classId = UUID.fromString(request.get("classId"));
+            String studentIdCode = request.get("studentId"); // รหัสนักศึกษา เช่น "2310511010014"
+
+            // ค้นหา user จากรหัสนักศึกษา
+            var userOpt = userRepository.findByStudentId(studentIdCode);
+            if (userOpt.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "ไม่พบนักศึกษารหัส " + studentIdCode + " ในระบบ");
+                return ResponseEntity.status(404).body(error);
+            }
+
+            User student = userOpt.get();
+
+            // ตรวจสอบว่าเพิ่มแล้วหรือยัง
+            var existing = classStudentRepository.findByClassIdAndStudentId(classId, student.getId());
+            if (existing.isPresent()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "นักศึกษารหัส " + studentIdCode + " อยู่ในคลาสนี้แล้ว");
+                return ResponseEntity.status(409).body(error);
+            }
+
+            // เพิ่มเข้าคลาส
+            ClassStudent cs = new ClassStudent();
+            cs.setClassId(classId);
+            cs.setStudentId(student.getId());
+            classStudentRepository.save(cs);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "เพิ่มนักศึกษาสำเร็จ");
+            response.put("studentName", student.getFullName());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "เพิ่มนักศึกษาไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(400).body(error);
+        }
+    }
+
+    // ==========================================
+    // DELETE /api/class-students/{classId}/{studentUserId} — ลบนักศึกษาออกจากคลาส
+    // ==========================================
+    @Transactional
+    @DeleteMapping("/{classId}/{studentUserId}")
+    public ResponseEntity<?> removeStudentFromClass(
+            @PathVariable UUID classId,
+            @PathVariable UUID studentUserId) {
+        try {
+            var existing = classStudentRepository.findByClassIdAndStudentId(classId, studentUserId);
+            if (existing.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "ไม่พบนักศึกษาในคลาสนี้");
+                return ResponseEntity.status(404).body(error);
+            }
+            classStudentRepository.deleteByClassIdAndStudentId(classId, studentUserId);
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "ลบนักศึกษาออกจากคลาสสำเร็จ");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ลบนักศึกษาไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(400).body(error);
+        }
+    }
+}
