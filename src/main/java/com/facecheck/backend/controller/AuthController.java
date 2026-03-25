@@ -12,6 +12,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -57,18 +59,27 @@ public class AuthController {
         newUser.setStudentId(request.getStudentId());
         newUser.setRole(request.getRole());
 
-        // แปลง List ตัวเลขเป็น String เพื่อเซฟลงฐานข้อมูล
-        if (request.getFaceDescriptor() != null) {
-            newUser.setFaceDescriptor(request.getFaceDescriptor().toString());
+        // ✅ อัปเดต: แปลง List<List<Double>> เป็น String แบบ JSON
+        if (request.getFaceDescriptor() != null && !request.getFaceDescriptor().isEmpty()) {
+            try {
+                // ใช้ ObjectMapper แปลงโครงสร้างที่ซับซ้อนให้เป็น String 
+                ObjectMapper mapper = new ObjectMapper();
+                String jsonDescriptor = mapper.writeValueAsString(request.getFaceDescriptor());
+                newUser.setFaceDescriptor(jsonDescriptor);
+            } catch (Exception e) {
+                e.printStackTrace();
+                return ResponseEntity.status(500).body("เกิดข้อผิดพลาดในการแปลงข้อมูลใบหน้า");
+            }
+        } else {
+            newUser.setFaceDescriptor(null); // ปล่อยให้ในฐานข้อมูลเป็นค่าว่าง (สำหรับอาจารย์)
         }
 
         try {
             userRepository.save(newUser);
-            return ResponseEntity.ok("สมัครสมาชิกและลงทะเบียนใบหน้าสำเร็จ");
+            return ResponseEntity.ok("สมัครสมาชิกและบันทึกใบหน้าสำเร็จ");
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "ไม่สามารถสมัครสมาชิกได้ อาจเนื่องจากข้อมูลซ้ำหรือผิดพลาด");
-            return ResponseEntity.status(400).body(error);
+            e.printStackTrace(); 
+            return ResponseEntity.status(500).body("เกิดข้อผิดพลาดในการเซฟลง Database");
         }
     }
 }
