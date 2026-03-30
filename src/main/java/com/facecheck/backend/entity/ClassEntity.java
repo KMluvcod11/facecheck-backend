@@ -43,4 +43,9 @@ public class ClassEntity {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    // เพิ่ม 3 บรรทัดนี้ต่อจากฟิลด์อื่นๆ ใน ClassEntity.java
+    private Double latitude;
+    private Double longitude;
+    private Double radius; // รัศมีที่อนุญาตให้เช็คชื่อ (เมตร)
 }

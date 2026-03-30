@@ -21,6 +21,9 @@ public class ClassStudentController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private com.facecheck.backend.repository.ClassRepository classRepository;
+
     // ==========================================
     // GET /api/class-students/{classId} — ดึงรายชื่อนักศึกษาในคลาส
     // ==========================================
@@ -115,5 +118,32 @@ public class ClassStudentController {
             error.put("message", "ลบนักศึกษาไม่สำเร็จ: " + e.getMessage());
             return ResponseEntity.status(400).body(error);
         }
+    }
+
+    // ==========================================
+    // GET /api/class-students/student/{studentUserId} — ดึงคลาสทั้งหมดของนักศึกษา
+    // ==========================================
+    @GetMapping("/student/{studentUserId}")
+    public ResponseEntity<?> getClassesForStudent(@PathVariable UUID studentUserId) {
+        // ดึงรายการว่านักศึกษาคนนี้อยู่ในคลาสไหนบ้าง
+        List<ClassStudent> enrollments = classStudentRepository.findByStudentId(studentUserId);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ClassStudent cs : enrollments) {
+            var classOpt = classRepository.findById(cs.getClassId());
+            if (classOpt.isPresent()) {
+                var c = classOpt.get();
+                Map<String, Object> classData = new HashMap<>();
+                classData.put("id", c.getId());
+                classData.put("subjectCode", c.getSubjectCode());
+                classData.put("subjectName", c.getSubjectName());
+                classData.put("room", c.getRoom());
+                classData.put("scheduleDay", c.getScheduleDay());
+                classData.put("startTime", c.getStartTime() != null ? c.getStartTime().toString() : "");
+                classData.put("endTime", c.getEndTime() != null ? c.getEndTime().toString() : "");
+                result.add(classData);
+            }
+        }
+        return ResponseEntity.ok(result);
     }
 }
