@@ -165,7 +165,7 @@ public class ClassStudentController {
             }
             com.facecheck.backend.entity.ClassEntity targetClass = classes.get(0); // เลือกวิชาแรกที่เจอ
 
-            // 2. หานักศึกษา
+            // 2. หานักศึกษา 2
             var userOpt = userRepository.findByStudentId(studentIdCode);
             if (userOpt.isEmpty()) {
                 Map<String, String> error = new HashMap<>();
@@ -199,4 +199,5 @@ public class ClassStudentController {
             return ResponseEntity.status(500).body(error);
         }
     }
+
 }
