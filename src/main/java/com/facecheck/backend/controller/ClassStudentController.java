@@ -146,4 +146,57 @@ public class ClassStudentController {
         }
         return ResponseEntity.ok(result);
     }
+
+    // ==========================================
+    // ✅ POST /api/class-students/join — นักศึกษากดเข้าร่วมคลาสเอง (ด้วยรหัสวิชา)
+    // ==========================================
+    @PostMapping("/join")
+    public ResponseEntity<?> joinClassBySubjectCode(@RequestBody Map<String, String> request) {
+        try {
+            String subjectCode = request.get("subjectCode");
+            String studentIdCode = request.get("studentId");
+
+            // 1. หาวิชาจากรหัสวิชา
+            List<com.facecheck.backend.entity.ClassEntity> classes = classRepository.findBySubjectCode(subjectCode);
+            if (classes == null || classes.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "ไม่พบวิชารหัส '" + subjectCode + "' ในระบบ กรุณาตรวจสอบความถูกต้อง");
+                return ResponseEntity.status(404).body(error);
+            }
+            com.facecheck.backend.entity.ClassEntity targetClass = classes.get(0); // เลือกวิชาแรกที่เจอ
+
+            // 2. หานักศึกษา
+            var userOpt = userRepository.findByStudentId(studentIdCode);
+            if (userOpt.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "ไม่พบข้อมูลนักศึกษาของคุณในระบบ");
+                return ResponseEntity.status(404).body(error);
+            }
+            User student = userOpt.get();
+
+            // 3. เช็คว่าเคยเข้าร่วมหรือยัง
+            var existing = classStudentRepository.findByClassIdAndStudentId(targetClass.getId(), student.getId());
+            if (existing.isPresent()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "คุณอยู่ในคลาสวิชานี้เรียบร้อยแล้ว!");
+                return ResponseEntity.status(409).body(error);
+            }
+
+            // 4. บันทึกเข้าคลาส
+            ClassStudent cs = new ClassStudent();
+            cs.setClassId(targetClass.getId());
+            cs.setStudentId(student.getId());
+            classStudentRepository.save(cs);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "เข้าร่วมคลาสสำเร็จ!");
+            response.put("subjectName", targetClass.getSubjectName());
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "เกิดข้อผิดพลาดภายในระบบ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
 }

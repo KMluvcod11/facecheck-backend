@@ -16,6 +16,11 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/classes")
 public class ClassController {
+    @Autowired
+    private com.facecheck.backend.repository.ClassStudentRepository classStudentRepository;
+
+    @Autowired
+    private com.facecheck.backend.repository.AttendanceRepository attendanceRepository;
 
     @Autowired
     private ClassRepository classRepository;
@@ -87,19 +92,22 @@ public class ClassController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteClass(@PathVariable UUID id) {
         try {
-            if (!classRepository.existsById(id)) {
-                Map<String, String> error = new HashMap<>();
-                error.put("message", "ไม่พบคลาสที่ต้องการลบ");
-                return ResponseEntity.status(404).body(error);
-            }
+            // 1. ลบประวัติการเข้าเรียนทั้งหมดของวิชานี้ทิ้งก่อน
+            attendanceRepository.deleteByClassId(id);
+
+            // 2. ลบรายชื่อนักศึกษาทั้งหมดที่ผูกกับวิชานี้ทิ้ง
+            classStudentRepository.deleteByClassId(id);
+
+            // 3. เมื่อไม่มีข้อมูลลูกค้างอยู่แล้ว ถึงจะลบคลาสหลักได้!
             classRepository.deleteById(id);
+
             Map<String, String> response = new HashMap<>();
-            response.put("message", "ลบคลาสสำเร็จ");
+            response.put("message", "ลบคลาสเรียนและข้อมูลที่เกี่ยวข้องสำเร็จ");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, String> error = new HashMap<>();
-            error.put("message", "ไม่สามารถลบคลาสได้: " + e.getMessage());
-            return ResponseEntity.status(400).body(error);
+            error.put("message", "ลบคลาสไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
         }
     }
 }

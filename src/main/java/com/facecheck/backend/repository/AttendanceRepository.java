@@ -8,4 +8,7 @@ import java.util.UUID;
 public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // ค้นหาประวัติการเช็กชื่อของนักศึกษาคนนี้
     List<Attendance> findByStudentId(UUID studentId);
+    // เพิ่มบรรทัดนี้ลงไป (ใช้สำหรับลบประวัติเช็คชื่อทั้งหมดของคลาสนี้)
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByClassId(UUID classId);
 }
