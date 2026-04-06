@@ -157,4 +157,54 @@ public class AttendanceController {
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
+
+    // ==========================================
+    // GET /api/attendance/class/{classId}/daily — สถิติรายวัน
+    // ==========================================
+    @GetMapping("/class/{classId}/daily")
+    public ResponseEntity<?> getDailyAttendance(
+            @PathVariable java.util.UUID classId,
+            @RequestParam String date) {
+        try {
+            java.time.LocalDate localDate = java.time.LocalDate.parse(date);
+            LocalDateTime startOfDay = localDate.atStartOfDay();
+            LocalDateTime endOfDay = localDate.atTime(23, 59, 59);
+
+            List<Attendance> records = attendanceRepository.findByClassIdAndCheckedAtBetween(classId, startOfDay, endOfDay);
+
+            // แปลงข้อมูลให้ Frontend ใช้ได้ง่าย
+            List<Map<String, Object>> result = new java.util.ArrayList<>();
+            for (Attendance record : records) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("studentId", record.getStudentId().toString()); // UUID ของ user
+
+                // ดึงข้อมูล studentId (13 หลัก) และชื่อจาก User
+                Optional<User> userOpt = userRepository.findById(record.getStudentId());
+                if (userOpt.isPresent()) {
+                    item.put("studentCode", userOpt.get().getStudentId()); // รหัส 13 หลัก
+                    item.put("studentName", userOpt.get().getFullName());
+                }
+
+                // แปลง status: on_time → present เพื่อให้ Frontend แสดงผลถูก
+                String status = record.getStatus();
+                if ("on_time".equals(status)) {
+                    status = "present";
+                }
+                item.put("status", status);
+
+                // เวลาเช็คชื่อ
+                if (record.getCheckedAt() != null) {
+                    item.put("time", record.getCheckedAt().toLocalTime().toString().substring(0, 5));
+                }
+
+                result.add(item);
+            }
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ดึงข้อมูลสถิติรายวันไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
 }

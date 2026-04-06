@@ -13,4 +13,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     void deleteByClassId(UUID classId);
     // ค้นหาประวัติการเช็คชื่อของนักศึกษาคนนี้ โดยเรียงจากเวลาเช็คชื่อล่าสุด (Desc)
     List<com.facecheck.backend.entity.Attendance> findByStudentIdOrderByCheckedAtDesc(UUID studentId);
+    // ค้นหาข้อมูลการเช็คชื่อตามคลาสและช่วงเวลา (สำหรับสถิติรายวัน)
+    List<Attendance> findByClassIdAndCheckedAtBetween(UUID classId, java.time.LocalDateTime start, java.time.LocalDateTime end);
 }
