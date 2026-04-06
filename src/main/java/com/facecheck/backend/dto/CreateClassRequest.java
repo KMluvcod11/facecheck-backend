@@ -13,4 +13,6 @@ public class CreateClassRequest {
     private String startTime;   // รับเป็น String "09:00" แล้วแปลงใน Controller
     private String endTime;     // รับเป็น String "12:00"
     private Integer lateThresholdMinutes;
+    private String term;            // ปีการศึกษา / เทอม
+    private String instructorName;  // ชื่ออาจารย์ผู้สอน
 }

@@ -48,4 +48,9 @@ public class ClassEntity {
     private Double latitude;
     private Double longitude;
     private Double radius; // รัศมีที่อนุญาตให้เช็คชื่อ (เมตร)
+
+    private String term; // ปีการศึกษา / เทอม เช่น "2568 / 1"
+
+    @Column(name = "instructor_name")
+    private String instructorName; // ชื่ออาจารย์ผู้สอน
 }

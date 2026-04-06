@@ -25,6 +25,9 @@ public class ClassController {
     @Autowired
     private ClassRepository classRepository;
 
+    @Autowired
+    private com.facecheck.backend.repository.UserRepository userRepository;
+
     // ==========================================
     // POST /api/classes — สร้างคลาสใหม่
     // ==========================================
@@ -84,6 +87,61 @@ public class ClassController {
         Map<String, String> error = new HashMap<>();
         error.put("message", "ไม่พบคลาสนี้");
         return ResponseEntity.status(404).body(error);
+    }
+
+    // ==========================================
+    // PUT /api/classes/{id} — อัปเดตข้อมูลคลาส
+    // ==========================================
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateClass(@PathVariable UUID id, @RequestBody CreateClassRequest request) {
+        try {
+            var classOpt = classRepository.findById(id);
+            if (classOpt.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "ไม่พบคลาสนี้");
+                return ResponseEntity.status(404).body(error);
+            }
+
+            ClassEntity existing = classOpt.get();
+
+            if (request.getSubjectName() != null) existing.setSubjectName(request.getSubjectName());
+            if (request.getSubjectCode() != null) existing.setSubjectCode(request.getSubjectCode());
+            if (request.getRoom() != null) existing.setRoom(request.getRoom());
+            if (request.getScheduleDay() != null) existing.setScheduleDay(request.getScheduleDay());
+            if (request.getLateThresholdMinutes() != null) existing.setLateThresholdMinutes(request.getLateThresholdMinutes());
+            if (request.getTerm() != null) existing.setTerm(request.getTerm());
+            if (request.getInstructorName() != null) {
+                existing.setInstructorName(request.getInstructorName());
+                
+                // อัปเดตโปรไฟล์อาจารย์ในบัญชีหลักด้วย (หน้าเว็บจะได้โชว์ชื่อตรงกันแม้ตอนล็อกอินใหม่)
+                if (existing.getTeacherId() != null) {
+                    var userOpt = userRepository.findById(existing.getTeacherId());
+                    if (userOpt.isPresent()) {
+                        com.facecheck.backend.entity.User updatedUser = userOpt.get();
+                        updatedUser.setFullName(request.getInstructorName());
+                        userRepository.save(updatedUser);
+                    }
+                }
+            }
+
+            if (request.getStartTime() != null && !request.getStartTime().isEmpty()) {
+                existing.setStartTime(LocalTime.parse(request.getStartTime()));
+            }
+            if (request.getEndTime() != null && !request.getEndTime().isEmpty()) {
+                existing.setEndTime(LocalTime.parse(request.getEndTime()));
+            }
+
+            ClassEntity saved = classRepository.save(existing);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "อัปเดตคลาสสำเร็จ");
+            response.put("data", saved);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "อัปเดตคลาสไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     // ==========================================

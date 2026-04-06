@@ -23,31 +23,38 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        Optional<User> userOpt;
+        try {
+            Optional<User> userOpt;
 
-        // เช็กว่ามีการส่งรหัสนักศึกษามาไหม (ถ้ามี แปลว่าเป็นนักศึกษา)
-        if (request.getStudentId() != null && !request.getStudentId().isEmpty()) {
-            userOpt = userRepository.findByStudentId(request.getStudentId());
-        }
-        // ถ้าไม่มี ส่งอีเมลมา (แปลว่าเป็นอาจารย์)
-        else {
-            userOpt = userRepository.findByEmail(request.getEmail());
-        }
-
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            // เช็กรหัสผ่าน (ชั่วคราวใช้เทียบ String ตรงๆ ไปก่อน)
-            if (user.getPasswordHash().equals(request.getPassword())) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("message", "เข้าสู่ระบบสำเร็จ");
-                response.put("user", user);
-                return ResponseEntity.ok(response);
+            // เช็กว่ามีการส่งรหัสนักศึกษามาไหม (ถ้ามี แปลว่าเป็นนักศึกษา)
+            if (request.getStudentId() != null && !request.getStudentId().isEmpty()) {
+                userOpt = userRepository.findByStudentId(request.getStudentId());
             }
-        }
+            // ถ้าไม่มี ส่งอีเมลมา (แปลว่าเป็นอาจารย์)
+            else {
+                userOpt = userRepository.findByEmail(request.getEmail());
+            }
 
-        Map<String, String> error = new HashMap<>();
-        error.put("message", "ข้อมูลเข้าสู่ระบบหรือรหัสผ่านไม่ถูกต้อง");
-        return ResponseEntity.status(401).body(error);
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                // เช็กรหัสผ่าน (กัน Error null)
+                if (request.getPassword() != null && request.getPassword().equals(user.getPasswordHash())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("message", "เข้าสู่ระบบสำเร็จ");
+                    response.put("user", user);
+                    return ResponseEntity.ok(response);
+                }
+            }
+
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ข้อมูลเข้าสู่ระบบหรือรหัสผ่านไม่ถูกต้อง");
+            return ResponseEntity.status(401).body(error);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "Internal System Error: " + e.toString());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     @PostMapping("/register")
