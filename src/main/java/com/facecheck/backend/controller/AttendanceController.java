@@ -19,7 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -40,38 +39,29 @@ public class AttendanceController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            // ✅ 1. เพิ่มโค้ดดักจับตรงนี้: ถ้า React ส่งค่าว่างมา ให้เตือนกลับไปเลย ไม่ต้องไปค้นหาใน Database
+            // 1. ตรวจสอบข้อมูลเบื้องต้น
             if (request.getStudentId() == null || request.getStudentId().isEmpty()) {
-                response.put("message", "ส่งข้อมูลไม่สำเร็จ: ไม่พบรหัสนักศึกษา (React ส่งค่า Null มา)");
+                response.put("message", "ส่งข้อมูลไม่สำเร็จ: ไม่พบรหัสนักศึกษา");
                 return ResponseEntity.status(400).body(response);
             }
 
-            // 2. ดึงข้อมูลคลาส
+            // 2. ดึงข้อมูลคลาสและนักศึกษา
             Optional<ClassEntity> classOpt = classRepository.findById(request.getClassId());
-            Optional<User> userOpt;
+            Optional<User> userOpt = userRepository.findByStudentId(request.getStudentId());
 
-            try {
-                userOpt = userRepository.findByStudentId(request.getStudentId());
-            } catch (Exception e) {
-                response.put("message", "Error: พบรหัสนักศึกษา [" + request.getStudentId() + "] ซ้ำกัน!");
-                return ResponseEntity.status(500).body(response);
-            }
-
-            // ✅ เปลี่ยนตรงนี้ เพื่อให้มันบอกชัดเจนว่าอะไรหายไป
             if (classOpt.isEmpty()) {
-                response.put("message", "ระบบขัดข้อง: ไม่พบคลาสเรียน ID [" + request.getClassId() + "] ในฐานข้อมูล");
+                response.put("message", "ไม่พบคลาสเรียนในระบบ");
                 return ResponseEntity.status(404).body(response);
             }
             if (userOpt.isEmpty()) {
-                response.put("message", "ระบบขัดข้อง: ไม่พบนักศึกษารหัส [" + request.getStudentId() + "] ในฐานข้อมูล (คุณอาจจะเผลอลบไปแล้ว)");
+                response.put("message", "ไม่พบข้อมูลนักศึกษาในระบบ");
                 return ResponseEntity.status(404).body(response);
             }
 
-            // ... (โค้ดด้านล่างเหมือนเดิม)
             ClassEntity classInfo = classOpt.get();
             User student = userOpt.get();
 
-            // 2. ตรวจสอบพิกัด GPS (ถ้าอาจารย์มีการตั้งค่าพิกัดไว้)
+            // 3. ตรวจสอบพิกัด GPS
             if (classInfo.getLatitude() != null && classInfo.getLongitude() != null && classInfo.getRadius() != null) {
                 double distance = calculateGPSDistance(
                         classInfo.getLatitude(), classInfo.getLongitude(),
@@ -79,21 +69,19 @@ public class AttendanceController {
                 );
 
                 if (distance > classInfo.getRadius()) {
-                    response.put("message", "พิกัดของคุณอยู่นอกพื้นที่ห้องเรียน (" + String.format("%.2f", distance) + " เมตร)");
+                    response.put("message", "คุณอยู่นอกพื้นที่เช็กชื่อ (" + String.format("%.2f", distance) + " เมตร)");
                     return ResponseEntity.status(403).body(response);
                 }
             }
 
-            // 3. เปรียบเทียบใบหน้า (Face Matching)
+            // 4. เปรียบเทียบใบหน้า (Face Matching)
             boolean isFaceMatched = false;
             String savedFaceJson = student.getFaceDescriptor();
 
             if (savedFaceJson != null && !savedFaceJson.isEmpty() && request.getFaceDescriptor() != null) {
                 ObjectMapper mapper = new ObjectMapper();
-                // แปลง JSON ที่เก็บไว้ (4 มุม) กลับมาเป็น List
                 List<List<Double>> savedDescriptors = mapper.readValue(savedFaceJson, new TypeReference<List<List<Double>>>(){});
 
-                // เทียบกับที่ส่งมาทีละมุม ถ้าผ่านมุมใดมุมหนึ่งถือว่าใช่
                 for (List<Double> savedDesc : savedDescriptors) {
                     double faceDistance = calculateEuclideanDistance(request.getFaceDescriptor(), savedDesc);
                     if (faceDistance <= FACE_MATCH_THRESHOLD) {
@@ -104,17 +92,19 @@ public class AttendanceController {
             }
 
             if (!isFaceMatched) {
-                response.put("message", "ใบหน้าไม่ตรงกับที่ลงทะเบียนไว้ กรุณาลองใหม่");
+                response.put("message", "ใบหน้าไม่ถูกต้อง กรุณาสแกนใหม่อีกครั้ง");
                 return ResponseEntity.status(401).body(response);
             }
 
-            // 4. คำนวณสถานะ (ตรงเวลา / สาย / ขาด)
+            // 5. คำนวณสถานะ (แก้ไขให้ตรงกับ Database Constraint)
             LocalTime nowTime = LocalTime.now();
-            String status = "present";
+            String status = "on_time"; // ✅ เปลี่ยนจาก present เป็น on_time
 
             if (classInfo.getStartTime() != null) {
+                // สาย: เกินเวลาเริ่ม + threshold (เช่น 15 นาที)
                 LocalTime lateTime = classInfo.getStartTime().plusMinutes(classInfo.getLateThresholdMinutes());
-                LocalTime absentTime = classInfo.getStartTime().plusMinutes(classInfo.getLateThresholdMinutes() * 2); // สมมติขาดเรียนคือสายเกิน 2 เท่า
+                // ขาด: เกินเวลาเริ่ม + (threshold * 2) หรือตามที่กำหนด
+                LocalTime absentTime = classInfo.getStartTime().plusMinutes(classInfo.getLateThresholdMinutes() * 2);
 
                 if (nowTime.isAfter(absentTime)) {
                     status = "absent";
@@ -123,7 +113,7 @@ public class AttendanceController {
                 }
             }
 
-            // 5. บันทึกลงตาราง Attendance
+            // 6. บันทึกลงตาราง Attendance
             Attendance attendance = new Attendance();
             attendance.setClassId(classInfo.getId());
             attendance.setStudentId(student.getId());
@@ -134,20 +124,19 @@ public class AttendanceController {
 
             attendanceRepository.save(attendance);
 
-            response.put("message", "เช็คชื่อสำเร็จ!");
+            response.put("message", "เช็กชื่อสำเร็จ!");
             response.put("status", status);
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
             e.printStackTrace();
-            response.put("message", "เกิดข้อผิดพลาดภายในระบบ: " + e.getMessage());
+            response.put("message", "เกิดข้อผิดพลาด: " + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
     }
 
-    // ================= HELPER METHODS =================
+    // --- Helper Methods ---
 
-    // คำนวณระยะห่างใบหน้า (Euclidean Distance)
     private double calculateEuclideanDistance(List<Double> desc1, List<Double> desc2) {
         if (desc1.size() != desc2.size()) return 999.0;
         double sum = 0.0;
@@ -158,9 +147,8 @@ public class AttendanceController {
         return Math.sqrt(sum);
     }
 
-    // คำนวณระยะห่าง GPS (Haversine Formula) คืนค่าเป็นเมตร
     private double calculateGPSDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371000; // รัศมีโลก (เมตร)
+        final int R = 6371000;
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
         double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
