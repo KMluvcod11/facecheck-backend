@@ -15,11 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -168,5 +164,39 @@ public class AttendanceController {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+    // ==========================================
+    // GET /api/attendance/student/{studentId} — ดึงประวัติการเข้าเรียนของนักศึกษา
+    // ==========================================
+    @GetMapping("/student/{studentId}")
+    public ResponseEntity<?> getStudentAttendanceHistory(@PathVariable UUID studentId) {
+        try {
+            // 1. ดึงประวัติทั้งหมดของนักศึกษาคนนี้ (เรียงจากใหม่ไปเก่า)
+            List<com.facecheck.backend.entity.Attendance> records = attendanceRepository.findByStudentIdOrderByCheckedAtDesc(studentId);
+
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (com.facecheck.backend.entity.Attendance a : records) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("id", a.getId());
+                data.put("status", a.getStatus());
+                data.put("checkedAt", a.getCheckedAt()); // เวลาที่เช็คชื่อ
+
+                // 2. ดึงข้อมูลวิชาเพื่อเอารหัสและชื่อวิชามาแสดงด้วย
+                var classOpt = classRepository.findById(a.getClassId());
+                if (classOpt.isPresent()) {
+                    data.put("subjectCode", classOpt.get().getSubjectCode());
+                    data.put("subjectName", classOpt.get().getSubjectName());
+                } else {
+                    data.put("subjectCode", "N/A");
+                    data.put("subjectName", "ไม่ทราบชื่อวิชา");
+                }
+                result.add(data);
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ดึงข้อมูลประวัติไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 }

@@ -11,4 +11,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // เพิ่มบรรทัดนี้ลงไป (ใช้สำหรับลบประวัติเช็คชื่อทั้งหมดของคลาสนี้)
     @org.springframework.transaction.annotation.Transactional
     void deleteByClassId(UUID classId);
+    // ค้นหาประวัติการเช็คชื่อของนักศึกษาคนนี้ โดยเรียงจากเวลาเช็คชื่อล่าสุด (Desc)
+    List<com.facecheck.backend.entity.Attendance> findByStudentIdOrderByCheckedAtDesc(UUID studentId);
 }
