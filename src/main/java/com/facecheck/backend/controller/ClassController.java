@@ -1,17 +1,25 @@
 package com.facecheck.backend.controller;
 
-import com.facecheck.backend.dto.CreateClassRequest;
-import com.facecheck.backend.entity.ClassEntity;
-import com.facecheck.backend.repository.ClassRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.facecheck.backend.dto.CreateClassRequest;
+import com.facecheck.backend.entity.ClassEntity;
+import com.facecheck.backend.repository.ClassRepository;
 
 @RestController
 @RequestMapping("/api/classes")
@@ -40,9 +48,8 @@ public class ClassController {
             newClass.setSubjectCode(request.getSubjectCode());
             newClass.setRoom(request.getRoom());
             newClass.setScheduleDay(request.getScheduleDay());
-            newClass.setLateThresholdMinutes(
-                request.getLateThresholdMinutes() != null ? request.getLateThresholdMinutes() : 15
-            );
+            Integer lateThreshold = request.getLateThresholdMinutes();
+            newClass.setLateThresholdMinutes(lateThreshold != null ? lateThreshold : 15);
 
             // แปลง String "09:00" เป็น LocalTime
             if (request.getStartTime() != null && !request.getStartTime().isEmpty()) {

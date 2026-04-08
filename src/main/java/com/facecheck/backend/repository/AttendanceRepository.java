@@ -1,9 +1,11 @@
 package com.facecheck.backend.repository;
 
-import com.facecheck.backend.entity.Attendance;
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.facecheck.backend.entity.Attendance;
 
 public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // ค้นหาประวัติการเช็กชื่อของนักศึกษาคนนี้
@@ -15,4 +17,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     List<com.facecheck.backend.entity.Attendance> findByStudentIdOrderByCheckedAtDesc(UUID studentId);
     // ค้นหาข้อมูลการเช็คชื่อตามคลาสและช่วงเวลา (สำหรับสถิติรายวัน)
     List<Attendance> findByClassIdAndCheckedAtBetween(UUID classId, java.time.LocalDateTime start, java.time.LocalDateTime end);
+    // ค้นหาข้อมูลการเช็คชื่อทั้งหมดของคลาสนี้
+    List<Attendance> findByClassId(UUID classId);
 }

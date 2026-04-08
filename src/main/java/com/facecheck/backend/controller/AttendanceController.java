@@ -9,10 +9,13 @@ import com.facecheck.backend.repository.ClassRepository;
 import com.facecheck.backend.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashMap;
@@ -23,6 +26,8 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/attendance")
 public class AttendanceController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AttendanceController.class);
 
     @Autowired
     private AttendanceRepository attendanceRepository;
@@ -128,8 +133,8 @@ public class AttendanceController {
             response.put("status", status);
             return ResponseEntity.ok(response);
 
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (IOException | RuntimeException e) {
+            logger.error("เช็กชื่อไม่สำเร็จ", e);
             response.put("message", "เกิดข้อผิดพลาด: " + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
@@ -156,6 +161,65 @@ public class AttendanceController {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+
+    // ==========================================
+    // GET /api/attendance/class/{classId}?date=YYYY-MM-DD — สถิติรายวัน (อาจารย์)
+    // ถ้าไม่ส่ง date → return ทั้งหมดของคลาสนั้น
+    // ถ้าส่ง date → filter เฉพาะวันนั้น
+    // ==========================================
+    @GetMapping("/class/{classId}")
+    public ResponseEntity<?> getClassAttendance(
+            @PathVariable java.util.UUID classId,
+            @RequestParam(required = false) String date) {
+        try {
+            List<Attendance> records;
+
+            if (date != null && !date.isEmpty()) {
+                java.time.LocalDate localDate = java.time.LocalDate.parse(date);
+                LocalDateTime startOfDay = localDate.atStartOfDay();
+                LocalDateTime endOfDay = localDate.atTime(23, 59, 59);
+                records = attendanceRepository.findByClassIdAndCheckedAtBetween(classId, startOfDay, endOfDay);
+            } else {
+                records = attendanceRepository.findByClassId(classId);
+            }
+
+            List<Map<String, Object>> result = new java.util.ArrayList<>();
+            for (Attendance record : records) {
+                Map<String, Object> item = new HashMap<>();
+
+                // userId = UUID ของ user (ตรงกับ studentId ใน attendance)
+                item.put("userId", record.getStudentId().toString());
+
+                // ดึงรหัสนักศึกษา (เช่น 640001) จาก User
+                Optional<User> userOpt = userRepository.findById(record.getStudentId());
+                if (userOpt.isPresent()) {
+                    item.put("studentId", userOpt.get().getStudentId());
+                } else {
+                    item.put("studentId", null);
+                }
+
+                // แปลง status เป็น uppercase: on_time → PRESENT, late → LATE, absent → ABSENT
+                String status = record.getStatus();
+                if ("on_time".equals(status)) {
+                    status = "PRESENT";
+                } else if (status != null) {
+                    status = status.toUpperCase();
+                }
+                item.put("status", status);
+
+                // checkedAt เป็น ISO datetime
+                item.put("checkedAt", record.getCheckedAt() != null ? record.getCheckedAt().toString() : null);
+
+                result.add(item);
+            }
+
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ดึงข้อมูลการเช็คชื่อไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     // ==========================================

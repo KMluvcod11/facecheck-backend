@@ -1,22 +1,30 @@
 package com.facecheck.backend.controller;
 
-import com.facecheck.backend.dto.LoginRequest;
-import com.facecheck.backend.dto.RegisterRequest;
-import com.facecheck.backend.entity.User;
-import com.facecheck.backend.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.facecheck.backend.dto.LoginRequest;
+import com.facecheck.backend.dto.RegisterRequest;
+import com.facecheck.backend.entity.User;
+import com.facecheck.backend.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
     private UserRepository userRepository;
@@ -50,7 +58,7 @@ public class AuthController {
             error.put("message", "ข้อมูลเข้าสู่ระบบหรือรหัสผ่านไม่ถูกต้อง");
             return ResponseEntity.status(401).body(error);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Login failed", e);
             Map<String, String> error = new HashMap<>();
             error.put("message", "Internal System Error: " + e.toString());
             return ResponseEntity.status(500).body(error);
@@ -73,8 +81,8 @@ public class AuthController {
                 ObjectMapper mapper = new ObjectMapper();
                 String jsonDescriptor = mapper.writeValueAsString(request.getFaceDescriptor());
                 newUser.setFaceDescriptor(jsonDescriptor);
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (JsonProcessingException e) {
+                logger.error("Failed to convert face descriptor", e);
                 return ResponseEntity.status(500).body("เกิดข้อผิดพลาดในการแปลงข้อมูลใบหน้า");
             }
         } else {
@@ -85,7 +93,7 @@ public class AuthController {
             userRepository.save(newUser);
             return ResponseEntity.ok("สมัครสมาชิกและบันทึกใบหน้าสำเร็จ");
         } catch (Exception e) {
-            e.printStackTrace(); 
+            logger.error("Failed to save user to database", e);
             return ResponseEntity.status(500).body("เกิดข้อผิดพลาดในการเซฟลง Database");
         }
     }
