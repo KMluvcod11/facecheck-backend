@@ -7,6 +7,7 @@ import com.facecheck.backend.entity.User;
 import com.facecheck.backend.repository.AttendanceRepository;
 import com.facecheck.backend.repository.ClassRepository;
 import com.facecheck.backend.repository.UserRepository;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -15,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashMap;
@@ -165,7 +165,7 @@ public class AttendanceController {
         }
     }
 
-    // --- Helper Methods ---test
+    // --- Helper Methods ---
 
     private double calculateEuclideanDistance(List<Double> desc1, List<Double> desc2) {
         if (desc1.size() != desc2.size()) return 999.0;
