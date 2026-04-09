@@ -66,24 +66,43 @@ public class AttendanceController {
             ClassEntity classInfo = classOpt.get();
             User student = userOpt.get();
 
-            // 3. ตรวจสอบพิกัด GPS
+            // 3. ตรวจสอบพิกัด GPS (ถ้าอาจารย์มีการตั้งพิกัดไว้)
             if (classInfo.getLatitude() != null && classInfo.getLongitude() != null && classInfo.getRadius() != null) {
+
+                // ✅ ดักจับกรณีนักศึกษาไม่ได้เปิด GPS ในมือถือ
+                if (request.getLatitude() == null || request.getLongitude() == null) {
+                    response.put("message", "ไม่สามารถเช็คชื่อได้: กรุณาอนุญาตให้ระบบเข้าถึงตำแหน่งที่ตั้ง (GPS)");
+                    return ResponseEntity.status(400).body(response);
+                }
+
                 double distance = calculateGPSDistance(
                         classInfo.getLatitude(), classInfo.getLongitude(),
                         request.getLatitude(), request.getLongitude()
                 );
 
                 if (distance > classInfo.getRadius()) {
-                    response.put("message", "คุณอยู่นอกพื้นที่เช็กชื่อ (" + String.format("%.2f", distance) + " เมตร)");
+                    response.put("message", "คุณอยู่นอกพื้นที่เช็กชื่อ (" + String.format("%.2f", distance) + " เมตร / อนุญาต " + classInfo.getRadius() + " เมตร)");
                     return ResponseEntity.status(403).body(response);
                 }
             }
 
             // 4. เปรียบเทียบใบหน้า (Face Matching)
-            boolean isFaceMatched = false;
             String savedFaceJson = student.getFaceDescriptor();
 
-            if (savedFaceJson != null && !savedFaceJson.isEmpty() && request.getFaceDescriptor() != null) {
+            // ✅ ดักจับกรณีที่นักศึกษายังไม่ได้อัปโหลดใบหน้าลงระบบเลย
+            if (savedFaceJson == null || savedFaceJson.isEmpty() || savedFaceJson.equals("[]")) {
+                response.put("message", "เช็คชื่อไม่สำเร็จ: คุณยังไม่ได้ลงทะเบียนข้อมูลใบหน้าในระบบ");
+                return ResponseEntity.status(400).body(response);
+            }
+
+            // ✅ ดักจับกรณีสแกนหน้าไม่ติดแล้ว React ส่งค่าว่างมา
+            if (request.getFaceDescriptor() == null || request.getFaceDescriptor().isEmpty()) {
+                response.put("message", "ระบบไม่ได้รับข้อมูลใบหน้าจากการสแกน กรุณาลองใหม่อีกครั้ง");
+                return ResponseEntity.status(400).body(response);
+            }
+
+            boolean isFaceMatched = false;
+            try {
                 ObjectMapper mapper = new ObjectMapper();
                 List<List<Double>> savedDescriptors = mapper.readValue(savedFaceJson, new TypeReference<List<List<Double>>>(){});
 
@@ -94,22 +113,26 @@ public class AttendanceController {
                         break;
                     }
                 }
+            } catch (Exception e) {
+                logger.error("Error parsing face JSON", e);
+                response.put("message", "เกิดข้อผิดพลาดในการอ่านข้อมูลใบหน้าจากระบบ");
+                return ResponseEntity.status(500).body(response);
             }
 
             if (!isFaceMatched) {
-                response.put("message", "ใบหน้าไม่ถูกต้อง กรุณาสแกนใหม่อีกครั้ง");
+                response.put("message", "ใบหน้าไม่ตรงกับที่ลงทะเบียนไว้ กรุณาสแกนใหม่อีกครั้ง");
                 return ResponseEntity.status(401).body(response);
             }
 
-            // 5. คำนวณสถานะ (แก้ไขให้ตรงกับ Database Constraint)
-            LocalTime nowTime = LocalTime.now();
-            String status = "on_time"; // ✅ เปลี่ยนจาก present เป็น on_time
+            // 5. คำนวณสถานะเวลา (บังคับใช้เวลาไทยเพื่อป้องกันการคำนวณผิดพลาด)
+            java.time.ZoneId thaiZone = java.time.ZoneId.of("Asia/Bangkok");
+            LocalTime nowTime = LocalTime.now(thaiZone);
+            String status = "on_time";
 
             if (classInfo.getStartTime() != null) {
-                // สาย: เกินเวลาเริ่ม + threshold (เช่น 15 นาที)
-                LocalTime lateTime = classInfo.getStartTime().plusMinutes(classInfo.getLateThresholdMinutes());
-                // ขาด: เกินเวลาเริ่ม + (threshold * 2) หรือตามที่กำหนด
-                LocalTime absentTime = classInfo.getStartTime().plusMinutes(classInfo.getLateThresholdMinutes() * 2);
+                int lateMin = classInfo.getLateThresholdMinutes() != null ? classInfo.getLateThresholdMinutes() : 15;
+                LocalTime lateTime = classInfo.getStartTime().plusMinutes(lateMin);
+                LocalTime absentTime = classInfo.getStartTime().plusMinutes(lateMin * 2);
 
                 if (nowTime.isAfter(absentTime)) {
                     status = "absent";
@@ -125,7 +148,9 @@ public class AttendanceController {
             attendance.setStatus(status);
             attendance.setLatitude(request.getLatitude());
             attendance.setLongitude(request.getLongitude());
-            attendance.setCheckedAt(LocalDateTime.now());
+
+            // ✅ บันทึกเวลาเช็คชื่อเป็นเวลาไทยลง Database ด้วย
+            attendance.setCheckedAt(LocalDateTime.now(thaiZone));
 
             attendanceRepository.save(attendance);
 
@@ -133,9 +158,9 @@ public class AttendanceController {
             response.put("status", status);
             return ResponseEntity.ok(response);
 
-        } catch (IOException | RuntimeException e) {
+        } catch (Exception e) {
             logger.error("เช็กชื่อไม่สำเร็จ", e);
-            response.put("message", "เกิดข้อผิดพลาด: " + e.getMessage());
+            response.put("message", "เกิดข้อผิดพลาดภายในระบบ: " + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
     }
@@ -271,4 +296,44 @@ public class AttendanceController {
             return ResponseEntity.status(500).body(error);
         }
     }
+    // ==========================================
+    // GET /api/attendance/student/{studentId} — ดึงประวัติการเข้าเรียนของนักศึกษา
+    // ==========================================
+    @GetMapping("/student/{studentId}")
+    public ResponseEntity<?> getStudentAttendanceHistory(@PathVariable java.util.UUID studentId) {
+        try {
+            // ดึงประวัติทั้งหมดของนักศึกษาคนนี้
+            List<Attendance> records = attendanceRepository.findByStudentIdOrderByCheckedAtDesc(studentId);
+
+            List<Map<String, Object>> result = new java.util.ArrayList<>();
+            for (Attendance a : records) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("id", a.getId());
+
+                // แปลง status ให้เป็น present/late/absent เพื่อแสดงในหน้า React
+                String status = a.getStatus();
+                if ("on_time".equals(status)) status = "present";
+                data.put("status", status);
+
+                data.put("checkedAt", a.getCheckedAt());
+
+                // ดึงชื่อวิชามาแสดง
+                var classOpt = classRepository.findById(a.getClassId());
+                if (classOpt.isPresent()) {
+                    data.put("subjectCode", classOpt.get().getSubjectCode());
+                    data.put("subjectName", classOpt.get().getSubjectName());
+                } else {
+                    data.put("subjectCode", "N/A");
+                    data.put("subjectName", "ไม่ทราบชื่อวิชา");
+                }
+                result.add(data);
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", "ดึงข้อมูลประวัติไม่สำเร็จ: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
 }

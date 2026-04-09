@@ -53,4 +53,7 @@ public class ClassEntity {
 
     @Column(name = "instructor_name")
     private String instructorName; // ชื่ออาจารย์ผู้สอน
+
+    @Column(name = "scheduled_dates_json", columnDefinition = "TEXT")
+    private String scheduledDatesJson;
 }

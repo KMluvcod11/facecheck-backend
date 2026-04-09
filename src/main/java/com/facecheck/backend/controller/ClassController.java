@@ -117,9 +117,16 @@ public class ClassController {
             if (request.getScheduleDay() != null) existing.setScheduleDay(request.getScheduleDay());
             if (request.getLateThresholdMinutes() != null) existing.setLateThresholdMinutes(request.getLateThresholdMinutes());
             if (request.getTerm() != null) existing.setTerm(request.getTerm());
+
+            // ✅ ดึงค่าพิกัด GPS จาก React มาบันทึกลง Database
+            if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
+            if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
+            if (request.getRadius() != null) existing.setRadius(request.getRadius());
+            if (request.getScheduledDatesJson() != null) existing.setScheduledDatesJson(request.getScheduledDatesJson());
+
             if (request.getInstructorName() != null) {
                 existing.setInstructorName(request.getInstructorName());
-                
+
                 // อัปเดตโปรไฟล์อาจารย์ในบัญชีหลักด้วย (หน้าเว็บจะได้โชว์ชื่อตรงกันแม้ตอนล็อกอินใหม่)
                 if (existing.getTeacherId() != null) {
                     var userOpt = userRepository.findById(existing.getTeacherId());

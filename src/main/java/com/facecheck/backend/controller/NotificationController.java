@@ -113,4 +113,42 @@ public class NotificationController {
             return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
         }
     }
+
+    // ==========================================
+    // ✅ POST /api/notifications/start-checkin/{classId} — แจ้งเตือนเริ่มเช็คชื่อ
+    // ==========================================
+    @PostMapping("/start-checkin/{classId}")
+    public ResponseEntity<?> notifyStartCheckIn(@PathVariable UUID classId) {
+        try {
+            var classOpt = classRepository.findById(classId);
+            if (classOpt.isEmpty()) {
+                return ResponseEntity.status(404).body(Map.of("message", "ไม่พบคลาสนี้"));
+            }
+            ClassEntity classEntity = classOpt.get();
+
+            List<ClassStudent> students = classStudentRepository.findByClassId(classId);
+            if (students.isEmpty()) {
+                return ResponseEntity.ok(Map.of("message", "ไม่มีนักศึกษาในคลาสนี้ให้แจ้งเตือน"));
+            }
+
+            int count = 0;
+            for (ClassStudent cs : students) {
+                Notification notif = new Notification();
+                notif.setUserId(cs.getStudentId());
+                notif.setClassId(classId);
+                // ใช้ type "info" (สีฟ้า) สำหรับการแจ้งเตือนเริ่มเช็คชื่อ
+                notif.setType("info");
+                notif.setTitle("เริ่มเช็คชื่อแล้ว!");
+                notif.setMessage("อาจารย์เปิดระบบเช็คชื่อวิชา " + classEntity.getSubjectCode() + " " + classEntity.getSubjectName() + " แล้ว กรุณาเข้าเช็คชื่อ");
+                notif.setIsRead(false);
+                notificationRepository.save(notif);
+                count++;
+            }
+
+            return ResponseEntity.ok(Map.of("message", "ส่งแจ้งเตือนเริ่มเช็คชื่อให้นักศึกษา " + count + " คน สำเร็จ"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
+        }
+    }
+
 }

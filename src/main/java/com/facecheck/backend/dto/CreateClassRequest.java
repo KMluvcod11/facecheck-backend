@@ -10,9 +10,16 @@ public class CreateClassRequest {
     private String subjectCode;
     private String room;
     private String scheduleDay;
-    private String startTime;   // รับเป็น String "09:00" แล้วแปลงใน Controller
-    private String endTime;     // รับเป็น String "12:00"
+    private String startTime;
+    private String endTime;
     private Integer lateThresholdMinutes;
-    private String term;            // ปีการศึกษา / เทอม
-    private String instructorName;  // ชื่ออาจารย์ผู้สอน
+    private String term;
+    private String instructorName;
+    private String scheduledDatesJson;
+
+    // ✅ เพิ่ม 3 บรรทัดนี้สำหรับรับค่าพิกัด GPS
+    private Double latitude;
+    private Double longitude;
+    // ✅ ของใหม่ที่ถูกต้อง
+    private Double radius;
 }
