@@ -165,7 +165,7 @@ public class AttendanceController {
         }
     }
 
-    // --- Helper Methods ---
+    // --- Helper Methods ---d
 
     private double calculateEuclideanDistance(List<Double> desc1, List<Double> desc2) {
         if (desc1.size() != desc2.size()) return 999.0;
