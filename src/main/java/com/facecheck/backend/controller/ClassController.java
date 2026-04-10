@@ -144,6 +144,9 @@ public class ClassController {
             if (request.getEndTime() != null && !request.getEndTime().isEmpty()) {
                 existing.setEndTime(LocalTime.parse(request.getEndTime()));
             }
+            if (request.getScheduledDates() != null) {
+                existing.setScheduledDates(request.getScheduledDates());
+            }
 
             ClassEntity saved = classRepository.save(existing);
 

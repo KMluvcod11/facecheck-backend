@@ -13,13 +13,12 @@ public class CreateClassRequest {
     private String startTime;
     private String endTime;
     private Integer lateThresholdMinutes;
-    private String term;
-    private String instructorName;
-    private String scheduledDatesJson;
-
-    // ✅ เพิ่ม 3 บรรทัดนี้สำหรับรับค่าพิกัด GPS
+    private String term;            // ปีการศึกษา / เทอม
+    private String instructorName;  // ชื่ออาจารย์ผู้สอน
+    private String scheduledDates;  // JSON String ของวันที่เช็คชื่อ
+    
+    // พิกัด GPS
     private Double latitude;
     private Double longitude;
-    // ✅ ของใหม่ที่ถูกต้อง
     private Double radius;
 }

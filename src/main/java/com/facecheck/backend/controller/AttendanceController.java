@@ -135,7 +135,8 @@ public class AttendanceController {
                 LocalTime absentTime = classInfo.getStartTime().plusMinutes(lateMin * 2);
 
                 if (nowTime.isAfter(absentTime)) {
-                    status = "absent";
+                    response.put("message", "หมดเวลาเช็คชื่อแล้ว (เลยกำหนดเวลาขาดเรียน)");
+                    return ResponseEntity.status(403).body(response);
                 } else if (nowTime.isAfter(lateTime)) {
                     status = "late";
                 }
