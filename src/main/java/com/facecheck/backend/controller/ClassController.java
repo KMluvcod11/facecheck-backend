@@ -122,7 +122,6 @@ public class ClassController {
             if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
             if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
             if (request.getRadius() != null) existing.setRadius(request.getRadius());
-            if (request.getScheduledDatesJson() != null) existing.setScheduledDatesJson(request.getScheduledDatesJson());
 
             if (request.getInstructorName() != null) {
                 existing.setInstructorName(request.getInstructorName());
