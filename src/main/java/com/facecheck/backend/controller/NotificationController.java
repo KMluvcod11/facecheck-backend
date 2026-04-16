@@ -150,5 +150,27 @@ public class NotificationController {
             return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
         }
     }
+    // ==========================================
+    // ✅ POST /api/notifications/ai-alert — ส่งแจ้งเตือน AI เข้าระบบนักศึกษาแบบเจาะจง
+    // ==========================================
+    @PostMapping("/ai-alert")
+    public ResponseEntity<?> sendAiAlert(@RequestBody Map<String, Object> payload) {
+        try {
+            UUID studentUserId = UUID.fromString(payload.get("studentUserId").toString());
+            String message = payload.get("message").toString();
 
+            Notification notif = new Notification();
+            notif.setUserId(studentUserId);
+            notif.setType("danger"); // ให้เป็นสีแดง (เตือนอันตราย)
+            notif.setTitle("⚠️ แจ้งเตือนความเสี่ยงหมดสิทธิ์สอบ");
+            notif.setMessage(message);
+            notif.setIsRead(false);
+
+            notificationRepository.save(notif);
+
+            return ResponseEntity.ok(Map.of("message", "ส่งการแจ้งเตือนเข้าระบบนักศึกษาสำเร็จ"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
+        }
+    }
 }
