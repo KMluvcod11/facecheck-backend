@@ -16,8 +16,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +38,6 @@ public class AttendanceController {
     @Autowired
     private UserRepository userRepository;
 
-    // ระยะห่างใบหน้าที่ยอมรับได้ (ยิ่งน้อยยิ่งเข้มงวด ปกติใช้ 0.4 - 0.5)
     private static final double FACE_MATCH_THRESHOLD = 0.45;
 
     @PostMapping("/check-in")
@@ -44,13 +45,11 @@ public class AttendanceController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            // 1. ตรวจสอบข้อมูลเบื้องต้น
             if (request.getStudentId() == null || request.getStudentId().isEmpty()) {
                 response.put("message", "ส่งข้อมูลไม่สำเร็จ: ไม่พบรหัสนักศึกษา");
                 return ResponseEntity.status(400).body(response);
             }
 
-            // 2. ดึงข้อมูลคลาสและนักศึกษา
             Optional<ClassEntity> classOpt = classRepository.findById(request.getClassId());
             Optional<User> userOpt = userRepository.findByStudentId(request.getStudentId());
 
@@ -66,10 +65,30 @@ public class AttendanceController {
             ClassEntity classInfo = classOpt.get();
             User student = userOpt.get();
 
-            // 3. ตรวจสอบพิกัด GPS (ถ้าอาจารย์มีการตั้งพิกัดไว้)
-            if (classInfo.getLatitude() != null && classInfo.getLongitude() != null && classInfo.getRadius() != null) {
+            // 1. ตรวจสอบสถานะเวลาและวันที่ (เพื่อดักทางข้ามวัน)
+            ZoneId thaiZone = ZoneId.of("Asia/Bangkok");
+            LocalDateTime nowDateTime = LocalDateTime.now(thaiZone);
+            LocalTime nowTime = nowDateTime.toLocalTime();
+            LocalDate nowDate = nowDateTime.toLocalDate();
 
-                // ✅ ดักจับกรณีนักศึกษาไม่ได้เปิด GPS ในมือถือ
+            // ✅ 2. ตรวจสอบการเช็กชื่อซ้ำ (ดักคนเช็กสองรอบในวันเดียว)
+            LocalDateTime startOfDay = nowDate.atStartOfDay();
+            LocalDateTime endOfDay = nowDate.atTime(23, 59, 59);
+
+            List<Attendance> existingAttendance = attendanceRepository.findByClassIdAndCheckedAtBetween(
+                    classInfo.getId(), startOfDay, endOfDay
+            );
+
+            boolean alreadyCheckedIn = existingAttendance.stream()
+                    .anyMatch(a -> a.getStudentId().equals(student.getId()));
+
+            if (alreadyCheckedIn) {
+                response.put("message", "ไม่สำเร็จ: คุณได้เช็กชื่อวิชานี้ไปเรียบร้อยแล้วในวันนี้");
+                return ResponseEntity.status(409).body(response); // 409 Conflict
+            }
+
+            // 3. ตรวจสอบพิกัด GPS
+            if (classInfo.getLatitude() != null && classInfo.getLongitude() != null && classInfo.getRadius() != null) {
                 if (request.getLatitude() == null || request.getLongitude() == null) {
                     response.put("message", "ไม่สามารถเช็คชื่อได้: กรุณาอนุญาตให้ระบบเข้าถึงตำแหน่งที่ตั้ง (GPS)");
                     return ResponseEntity.status(400).body(response);
@@ -86,16 +105,13 @@ public class AttendanceController {
                 }
             }
 
-            // 4. เปรียบเทียบใบหน้า (Face Matching)
+            // 4. เปรียบเทียบใบหน้า
             String savedFaceJson = student.getFaceDescriptor();
-
-            // ✅ ดักจับกรณีที่นักศึกษายังไม่ได้อัปโหลดใบหน้าลงระบบเลย
             if (savedFaceJson == null || savedFaceJson.isEmpty() || savedFaceJson.equals("[]")) {
                 response.put("message", "เช็คชื่อไม่สำเร็จ: คุณยังไม่ได้ลงทะเบียนข้อมูลใบหน้าในระบบ");
                 return ResponseEntity.status(400).body(response);
             }
 
-            // ✅ ดักจับกรณีสแกนหน้าไม่ติดแล้ว React ส่งค่าว่างมา
             if (request.getFaceDescriptor() == null || request.getFaceDescriptor().isEmpty()) {
                 response.put("message", "ระบบไม่ได้รับข้อมูลใบหน้าจากการสแกน กรุณาลองใหม่อีกครั้ง");
                 return ResponseEntity.status(400).body(response);
@@ -105,7 +121,6 @@ public class AttendanceController {
             try {
                 ObjectMapper mapper = new ObjectMapper();
                 List<List<Double>> savedDescriptors = mapper.readValue(savedFaceJson, new TypeReference<List<List<Double>>>(){});
-
                 for (List<Double> savedDesc : savedDescriptors) {
                     double faceDistance = calculateEuclideanDistance(request.getFaceDescriptor(), savedDesc);
                     if (faceDistance <= FACE_MATCH_THRESHOLD) {
@@ -124,20 +139,41 @@ public class AttendanceController {
                 return ResponseEntity.status(401).body(response);
             }
 
-            // 5. คำนวณสถานะเวลา (บังคับใช้เวลาไทยเพื่อป้องกันการคำนวณผิดพลาด)
-            java.time.ZoneId thaiZone = java.time.ZoneId.of("Asia/Bangkok");
-            LocalTime nowTime = LocalTime.now(thaiZone);
+            // 5. คำนวณสถานะเวลา
             String status = "on_time";
-
             if (classInfo.getStartTime() != null) {
-                int lateMin = classInfo.getLateThresholdMinutes() != null ? classInfo.getLateThresholdMinutes() : 15;
-                LocalTime lateTime = classInfo.getStartTime().plusMinutes(lateMin);
-                LocalTime absentTime = classInfo.getStartTime().plusMinutes(lateMin * 2);
+                // 5.1 ตรวจสอบตารางเรียน scheduledDates
+                String scheduledDatesJson = classInfo.getScheduledDates();
+                boolean isClassDay = false;
+                if (scheduledDatesJson != null && !scheduledDatesJson.isEmpty()) {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        List<Map<String, Object>> scheduledDates = mapper.readValue(scheduledDatesJson, new TypeReference<List<Map<String, Object>>>(){});
+                        isClassDay = scheduledDates.stream()
+                                .anyMatch(d -> LocalDate.parse(d.get("date").toString()).equals(nowDate));
+                    } catch (Exception e) {
+                        logger.error("Error parsing scheduled dates", e);
+                    }
+                }
 
-                if (nowTime.isAfter(absentTime)) {
-                    response.put("message", "หมดเวลาเช็คชื่อแล้ว (เลยกำหนดเวลาขาดเรียน)");
+                if (!isClassDay) {
+                    response.put("message", "ไม่สามารถเช็คชื่อได้ เนื่องจากวันนี้ไม่มีตารางเรียนที่กำหนดไว้");
                     return ResponseEntity.status(403).body(response);
-                } else if (nowTime.isAfter(lateTime)) {
+                }
+
+                int lateMin = classInfo.getLateThresholdMinutes() != null ? classInfo.getLateThresholdMinutes() : 15;
+                LocalTime lateStartTime = classInfo.getStartTime().plusMinutes(lateMin);
+                LocalTime absentStartTime = classInfo.getEndTime();
+
+                if (absentStartTime == null) absentStartTime = classInfo.getStartTime().plusHours(2);
+
+                if (nowTime.isBefore(classInfo.getStartTime())) {
+                    response.put("message", "ยังไม่ถึงเวลาเริ่มคลาสเรียน");
+                    return ResponseEntity.status(403).body(response);
+                } else if (nowTime.isAfter(absentStartTime)) {
+                    response.put("message", "ไม่สำเร็จ หมดเวลาเช็คชื่อแล้ว (เลยกำหนดเวลาขาดเรียน)");
+                    return ResponseEntity.status(403).body(response);
+                } else if (nowTime.isAfter(lateStartTime)) {
                     status = "late";
                 }
             }
@@ -149,9 +185,7 @@ public class AttendanceController {
             attendance.setStatus(status);
             attendance.setLatitude(request.getLatitude());
             attendance.setLongitude(request.getLongitude());
-
-            // ✅ บันทึกเวลาเช็คชื่อเป็นเวลาไทยลง Database ด้วย
-            attendance.setCheckedAt(LocalDateTime.now(thaiZone));
+            attendance.setCheckedAt(nowDateTime);
 
             attendanceRepository.save(attendance);
 
@@ -189,18 +223,10 @@ public class AttendanceController {
         return R * c;
     }
 
-    // ==========================================
-    // GET /api/attendance/class/{classId}?date=YYYY-MM-DD — สถิติรายวัน (อาจารย์)
-    // ถ้าไม่ส่ง date → return ทั้งหมดของคลาสนั้น
-    // ถ้าส่ง date → filter เฉพาะวันนั้น
-    // ==========================================
     @GetMapping("/class/{classId}")
-    public ResponseEntity<?> getClassAttendance(
-            @PathVariable java.util.UUID classId,
-            @RequestParam(required = false) String date) {
+    public ResponseEntity<?> getClassAttendance(@PathVariable java.util.UUID classId, @RequestParam(required = false) String date) {
         try {
             List<Attendance> records;
-
             if (date != null && !date.isEmpty()) {
                 java.time.LocalDate localDate = java.time.LocalDate.parse(date);
                 LocalDateTime startOfDay = localDate.atStartOfDay();
@@ -209,116 +235,67 @@ public class AttendanceController {
             } else {
                 records = attendanceRepository.findByClassId(classId);
             }
-
             List<Map<String, Object>> result = new java.util.ArrayList<>();
             for (Attendance record : records) {
                 Map<String, Object> item = new HashMap<>();
-
-                // userId = UUID ของ user (ตรงกับ studentId ใน attendance)
                 item.put("userId", record.getStudentId().toString());
-
-                // ดึงรหัสนักศึกษา (เช่น 640001) จาก User
                 Optional<User> userOpt = userRepository.findById(record.getStudentId());
-                if (userOpt.isPresent()) {
-                    item.put("studentId", userOpt.get().getStudentId());
-                } else {
-                    item.put("studentId", null);
-                }
-
-                // แปลง status เป็น uppercase: on_time → PRESENT, late → LATE, absent → ABSENT
+                item.put("studentId", userOpt.isPresent() ? userOpt.get().getStudentId() : null);
                 String status = record.getStatus();
-                if ("on_time".equals(status)) {
-                    status = "PRESENT";
-                } else if (status != null) {
-                    status = status.toUpperCase();
-                }
+                if ("on_time".equals(status)) status = "PRESENT";
+                else if (status != null) status = status.toUpperCase();
                 item.put("status", status);
-
-                // checkedAt เป็น ISO datetime
                 item.put("checkedAt", record.getCheckedAt() != null ? record.getCheckedAt().toString() : null);
-
                 result.add(item);
             }
-
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "ดึงข้อมูลการเช็คชื่อไม่สำเร็จ: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
+            return ResponseEntity.status(500).body(Map.of("message", "ดึงข้อมูลการเช็คชื่อไม่สำเร็จ: " + e.getMessage()));
         }
     }
 
-    // ==========================================
-    // GET /api/attendance/class/{classId}/daily — สถิติรายวัน
-    // ==========================================
     @GetMapping("/class/{classId}/daily")
-    public ResponseEntity<?> getDailyAttendance(
-            @PathVariable java.util.UUID classId,
-            @RequestParam String date) {
+    public ResponseEntity<?> getDailyAttendance(@PathVariable java.util.UUID classId, @RequestParam String date) {
         try {
             java.time.LocalDate localDate = java.time.LocalDate.parse(date);
             LocalDateTime startOfDay = localDate.atStartOfDay();
             LocalDateTime endOfDay = localDate.atTime(23, 59, 59);
-
             List<Attendance> records = attendanceRepository.findByClassIdAndCheckedAtBetween(classId, startOfDay, endOfDay);
-
-            // แปลงข้อมูลให้ Frontend ใช้ได้ง่าย
             List<Map<String, Object>> result = new java.util.ArrayList<>();
             for (Attendance record : records) {
                 Map<String, Object> item = new HashMap<>();
-                item.put("studentId", record.getStudentId().toString()); // UUID ของ user
-
-                // ดึงข้อมูล studentId (13 หลัก) และชื่อจาก User
+                item.put("studentId", record.getStudentId().toString());
                 Optional<User> userOpt = userRepository.findById(record.getStudentId());
                 if (userOpt.isPresent()) {
-                    item.put("studentCode", userOpt.get().getStudentId()); // รหัส 13 หลัก
+                    item.put("studentCode", userOpt.get().getStudentId());
                     item.put("studentName", userOpt.get().getFullName());
                 }
-
-                // แปลง status: on_time → present เพื่อให้ Frontend แสดงผลถูก
                 String status = record.getStatus();
-                if ("on_time".equals(status)) {
-                    status = "present";
-                }
+                if ("on_time".equals(status)) status = "present";
                 item.put("status", status);
-
-                // เวลาเช็คชื่อ
                 if (record.getCheckedAt() != null) {
                     item.put("time", record.getCheckedAt().toLocalTime().toString().substring(0, 5));
                 }
-
                 result.add(item);
             }
-
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "ดึงข้อมูลสถิติรายวันไม่สำเร็จ: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
+            return ResponseEntity.status(500).body(Map.of("message", "ดึงข้อมูลสถิติรายวันไม่สำเร็จ: " + e.getMessage()));
         }
     }
-    // ==========================================
-    // GET /api/attendance/student/{studentId} — ดึงประวัติการเข้าเรียนของนักศึกษา
-    // ==========================================
+
     @GetMapping("/student/{studentId}")
     public ResponseEntity<?> getStudentAttendanceHistory(@PathVariable java.util.UUID studentId) {
         try {
-            // ดึงประวัติทั้งหมดของนักศึกษาคนนี้
             List<Attendance> records = attendanceRepository.findByStudentIdOrderByCheckedAtDesc(studentId);
-
             List<Map<String, Object>> result = new java.util.ArrayList<>();
             for (Attendance a : records) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("id", a.getId());
-
-                // แปลง status ให้เป็น present/late/absent เพื่อแสดงในหน้า React
                 String status = a.getStatus();
                 if ("on_time".equals(status)) status = "present";
                 data.put("status", status);
-
                 data.put("checkedAt", a.getCheckedAt());
-
-                // ดึงชื่อวิชามาแสดง
                 var classOpt = classRepository.findById(a.getClassId());
                 if (classOpt.isPresent()) {
                     data.put("subjectCode", classOpt.get().getSubjectCode());
@@ -331,10 +308,24 @@ public class AttendanceController {
             }
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("message", "ดึงข้อมูลประวัติไม่สำเร็จ: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
+            return ResponseEntity.status(500).body(Map.of("message", "ดึงข้อมูลประวัติไม่สำเร็จ: " + e.getMessage()));
         }
     }
 
+    @GetMapping("/student/{studentId}/stats/{classId}")
+    public ResponseEntity<Map<String, Object>> getStudentStats(@PathVariable java.util.UUID studentId, @PathVariable java.util.UUID classId) {
+        List<Attendance> studentAttendances = attendanceRepository.findByStudentIdAndClassId(studentId, classId);
+        int present = 0;
+        int late = 0;
+        for (Attendance a : studentAttendances) {
+            String status = a.getStatus() != null ? a.getStatus().trim().toLowerCase() : "";
+            if (status.equals("present") || status.equals("on_time")) present++;
+            else if (status.equals("late")) late++;
+        }
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("present", present);
+        stats.put("late", late);
+        stats.put("absent", 0); // หรือคำนวณตามต้องการ
+        return ResponseEntity.ok(stats);
+    }
 }
