@@ -90,9 +90,30 @@ public class NotificationController {
             }
             ClassEntity classEntity = classOpt.get();
 
+            // ✅ ลบวันนี้ออกจาก scheduledDates เพื่อปิดการสแกนของนักศึกษาทันที
+            String todayStr = java.time.LocalDate.now().toString(); // "2026-04-20"
+            String currentDates = classEntity.getScheduledDates();
+            if (currentDates != null && !currentDates.isEmpty()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.node.ArrayNode datesArray = (com.fasterxml.jackson.databind.node.ArrayNode) mapper.readTree(currentDates);
+                    com.fasterxml.jackson.databind.node.ArrayNode filteredDates = mapper.createArrayNode();
+                    for (var node : datesArray) {
+                        if (!todayStr.equals(node.get("date").asText())) {
+                            filteredDates.add(node);
+                        }
+                    }
+                    classEntity.setScheduledDates(mapper.writeValueAsString(filteredDates));
+                    classRepository.save(classEntity);
+                } catch (Exception jsonEx) {
+                    // ถ้า parse JSON ไม่ได้ ก็ข้ามไป (ไม่กระทบการส่งแจ้งเตือน)
+                    System.err.println("ไม่สามารถอัปเดต scheduledDates: " + jsonEx.getMessage());
+                }
+            }
+
             List<ClassStudent> students = classStudentRepository.findByClassId(classId);
             if (students.isEmpty()) {
-                return ResponseEntity.ok(Map.of("message", "ไม่มีนักศึกษาในคลาสนี้ให้แจ้งเตือน"));
+                return ResponseEntity.ok(Map.of("message", "ยกเลิกคลาสแล้ว แต่ไม่มีนักศึกษาในคลาสนี้ให้แจ้งเตือน"));
             }
 
             int count = 0;
@@ -108,7 +129,7 @@ public class NotificationController {
                 count++;
             }
 
-            return ResponseEntity.ok(Map.of("message", "ส่งแจ้งเตือนให้นักศึกษา " + count + " คน สำเร็จ"));
+            return ResponseEntity.ok(Map.of("message", "ยกเลิกคลาสสำเร็จ ลบวันนี้ออกจากตารางแล้ว และส่งแจ้งเตือนให้นักศึกษา " + count + " คน"));
         } catch (Exception e) {
             return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
         }
