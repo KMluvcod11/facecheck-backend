@@ -20,10 +20,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -288,7 +291,13 @@ public class AttendanceController {
     public ResponseEntity<?> getStudentAttendanceHistory(@PathVariable java.util.UUID studentId) {
         try {
             List<Attendance> records = attendanceRepository.findByStudentIdOrderByCheckedAtDesc(studentId);
-            List<Map<String, Object>> result = new java.util.ArrayList<>();
+            List<Map<String, Object>> result = new ArrayList<>();
+
+            // --- 1. เพิ่ม records ที่มีจริงเข้าไปก่อน (present / late) ---
+            // รวบรวม classIds ที่นักศึกษาลงทะเบียนอยู่จาก records ที่มี
+            Set<java.util.UUID> enrolledClassIds = new HashSet<>();
+            Map<java.util.UUID, Map<LocalDate, Boolean>> attendedDatesPerClass = new HashMap<>();
+
             for (Attendance a : records) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("id", a.getId());
@@ -296,6 +305,7 @@ public class AttendanceController {
                 if ("on_time".equals(status)) status = "present";
                 data.put("status", status);
                 data.put("checkedAt", a.getCheckedAt());
+                data.put("classId", a.getClassId());
                 var classOpt = classRepository.findById(a.getClassId());
                 if (classOpt.isPresent()) {
                     data.put("subjectCode", classOpt.get().getSubjectCode());
@@ -305,7 +315,61 @@ public class AttendanceController {
                     data.put("subjectName", "ไม่ทราบชื่อวิชา");
                 }
                 result.add(data);
+
+                // Track attended dates per class
+                enrolledClassIds.add(a.getClassId());
+                attendedDatesPerClass
+                    .computeIfAbsent(a.getClassId(), k -> new HashMap<>())
+                    .put(a.getCheckedAt().toLocalDate(), true);
             }
+
+            // --- 2. หา absent records จาก scheduledDates ที่ผ่านมาแล้ว ---
+            LocalDate today = LocalDate.now(ZoneId.of("Asia/Bangkok"));
+            ObjectMapper mapper = new ObjectMapper();
+
+            for (java.util.UUID classId : enrolledClassIds) {
+                var classOpt = classRepository.findById(classId);
+                if (classOpt.isEmpty()) continue;
+
+                var classEntity = classOpt.get();
+                String scheduledJson = classEntity.getScheduledDates();
+                if (scheduledJson == null || scheduledJson.isEmpty()) continue;
+
+                try {
+                    List<Map<String, Object>> scheduledDates = mapper.readValue(
+                        scheduledJson, new TypeReference<List<Map<String, Object>>>(){});
+
+                    Map<LocalDate, Boolean> attendedDates = attendedDatesPerClass.getOrDefault(classId, new HashMap<>());
+
+                    for (Map<String, Object> d : scheduledDates) {
+                        LocalDate classDate = LocalDate.parse(d.get("date").toString());
+                        // นับเฉพาะวันที่ผ่านมาแล้วและไม่มี record เช็กชื่อ
+                        if (!classDate.isAfter(today) && !attendedDates.containsKey(classDate)) {
+                            Map<String, Object> absentRecord = new HashMap<>();
+                            absentRecord.put("id", "absent-" + classId + "-" + classDate);
+                            absentRecord.put("status", "absent");
+                            absentRecord.put("checkedAt", classDate.atTime(classEntity.getStartTime() != null ? classEntity.getStartTime() : LocalTime.of(0,0)));
+                            absentRecord.put("classId", classId);
+                            absentRecord.put("subjectCode", classEntity.getSubjectCode());
+                            absentRecord.put("subjectName", classEntity.getSubjectName());
+                            result.add(absentRecord);
+                        }
+                    }
+                } catch (Exception ex) {
+                    logger.error("Error parsing scheduledDates for class " + classId, ex);
+                }
+            }
+
+            // --- 3. เรียงลำดับจากใหม่ไปเก่า ---
+            result.sort((a, b) -> {
+                Object aDate = a.get("checkedAt");
+                Object bDate = b.get("checkedAt");
+                if (aDate == null && bDate == null) return 0;
+                if (aDate == null) return 1;
+                if (bDate == null) return -1;
+                return bDate.toString().compareTo(aDate.toString());
+            });
+
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("message", "ดึงข้อมูลประวัติไม่สำเร็จ: " + e.getMessage()));
@@ -317,15 +381,45 @@ public class AttendanceController {
         List<Attendance> studentAttendances = attendanceRepository.findByStudentIdAndClassId(studentId, classId);
         int present = 0;
         int late = 0;
+        Set<LocalDate> attendedDates = new HashSet<>();
+
         for (Attendance a : studentAttendances) {
             String status = a.getStatus() != null ? a.getStatus().trim().toLowerCase() : "";
             if (status.equals("present") || status.equals("on_time")) present++;
             else if (status.equals("late")) late++;
+            if (a.getCheckedAt() != null) {
+                attendedDates.add(a.getCheckedAt().toLocalDate());
+            }
         }
+
+        // คำนวณ absent จาก scheduledDates ที่ผ่านมาแล้ว
+        int absent = 0;
+        Optional<ClassEntity> classOpt = classRepository.findById(classId);
+        if (classOpt.isPresent()) {
+            String scheduledJson = classOpt.get().getScheduledDates();
+            if (scheduledJson != null && !scheduledJson.isEmpty()) {
+                try {
+                    ObjectMapper mapper = new ObjectMapper();
+                    List<Map<String, Object>> scheduledDates = mapper.readValue(
+                        scheduledJson, new TypeReference<List<Map<String, Object>>>(){});
+                    LocalDate today = LocalDate.now(ZoneId.of("Asia/Bangkok"));
+                    for (Map<String, Object> d : scheduledDates) {
+                        LocalDate classDate = LocalDate.parse(d.get("date").toString());
+                        // วันที่ผ่านมาแล้วและไม่มี record = ขาดเรียน
+                        if (!classDate.isAfter(today) && !attendedDates.contains(classDate)) {
+                            absent++;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Error calculating absent count", e);
+                }
+            }
+        }
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("present", present);
         stats.put("late", late);
-        stats.put("absent", 0); // หรือคำนวณตามต้องการ
+        stats.put("absent", absent);
         return ResponseEntity.ok(stats);
     }
 }
