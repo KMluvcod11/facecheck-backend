@@ -4,7 +4,7 @@ import lombok.Data;
 
 @Data
 public class LoginRequest {
-    private String email;
-    private String studentId; // เพิ่มบรรทัดนี้
+    private String username;   // อาจารย์ใช้ field นี้
+    private String studentId;  // นักศึกษาใช้ field นี้
     private String password;
 }

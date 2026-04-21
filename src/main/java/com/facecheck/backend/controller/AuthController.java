@@ -1,5 +1,6 @@
 package com.facecheck.backend.controller;
 
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -34,22 +35,27 @@ public class AuthController {
         try {
             Optional<User> userOpt;
 
-            // เช็กว่ามีการส่งรหัสนักศึกษามาไหม (ถ้ามี แปลว่าเป็นนักศึกษา)
+            // นักศึกษา: ค้นหาจาก studentId
             if (request.getStudentId() != null && !request.getStudentId().isEmpty()) {
                 userOpt = userRepository.findByStudentId(request.getStudentId());
             }
-            // ถ้าไม่มี ส่งอีเมลมา (แปลว่าเป็นอาจารย์)
+            // อาจารย์: ค้นหาจาก username
             else {
-                userOpt = userRepository.findByEmail(request.getEmail());
+                userOpt = userRepository.findByUsername(request.getUsername());
             }
 
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
                 // เช็กรหัสผ่าน (กัน Error null)
                 if (request.getPassword() != null && request.getPassword().equals(user.getPasswordHash())) {
+                    // สร้าง simple session token: Base64(userId:timestamp)
+                    String raw = user.getId() + ":" + System.currentTimeMillis();
+                    String token = Base64.getEncoder().encodeToString(raw.getBytes());
+
                     Map<String, Object> response = new HashMap<>();
                     response.put("message", "เข้าสู่ระบบสำเร็จ");
                     response.put("user", user);
+                    response.put("token", token);  // ✅ frontend ใช้ field นี้
                     return ResponseEntity.ok(response);
                 }
             }
@@ -68,8 +74,9 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         User newUser = new User();
-        newUser.setEmail(request.getEmail());
-        newUser.setPasswordHash(request.getPassword()); // ในอนาคตควรใช้ BCrypt
+        newUser.setEmail(request.getEmail());       // นักศึกษาจะมี email (studentId@utcc.ac.th)
+        newUser.setUsername(request.getUsername()); // อาจารย์จะมี username
+        newUser.setPasswordHash(request.getPassword());
         newUser.setFullName(request.getFullName());
         newUser.setStudentId(request.getStudentId());
         newUser.setRole(request.getRole());

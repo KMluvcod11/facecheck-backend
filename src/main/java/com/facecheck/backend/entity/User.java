@@ -17,6 +17,9 @@ public class User {
     private UUID id;
 
     private String email;
+
+    @Column(unique = true)
+    private String username;  // สำหรับอาจารย์ login
     
     @Column(name = "password_hash")
     private String passwordHash;
