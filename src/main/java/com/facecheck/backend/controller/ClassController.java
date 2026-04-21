@@ -50,6 +50,8 @@ public class ClassController {
             newClass.setScheduleDay(request.getScheduleDay());
             Integer lateThreshold = request.getLateThresholdMinutes();
             newClass.setLateThresholdMinutes(lateThreshold != null ? lateThreshold : 15);
+            Integer maxAbsences = request.getMaxAbsences();
+            newClass.setMaxAbsences(maxAbsences != null ? maxAbsences : 4);
 
             // แปลง String "09:00" เป็น LocalTime
             if (request.getStartTime() != null && !request.getStartTime().isEmpty()) {
@@ -116,6 +118,7 @@ public class ClassController {
             if (request.getRoom() != null) existing.setRoom(request.getRoom());
             if (request.getScheduleDay() != null) existing.setScheduleDay(request.getScheduleDay());
             if (request.getLateThresholdMinutes() != null) existing.setLateThresholdMinutes(request.getLateThresholdMinutes());
+            if (request.getMaxAbsences() != null) existing.setMaxAbsences(request.getMaxAbsences());
             if (request.getTerm() != null) existing.setTerm(request.getTerm());
 
             // ✅ ดึงค่าพิกัด GPS จาก React มาบันทึกลง Database

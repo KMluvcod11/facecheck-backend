@@ -13,6 +13,7 @@ public class CreateClassRequest {
     private String startTime;
     private String endTime;
     private Integer lateThresholdMinutes;
+    private Integer maxAbsences;
     private String term;            // ปีการศึกษา / เทอม
     private String instructorName;  // ชื่ออาจารย์ผู้สอน
     private String scheduledDates;  // JSON String ของวันที่เช็คชื่อ

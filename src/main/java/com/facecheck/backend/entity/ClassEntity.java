@@ -40,6 +40,9 @@ public class ClassEntity {
     @Column(name = "late_threshold_minutes")
     private Integer lateThresholdMinutes;
 
+    @Column(name = "max_absences")
+    private Integer maxAbsences;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
