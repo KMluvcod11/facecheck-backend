@@ -8,8 +8,10 @@ import com.facecheck.backend.repository.AttendanceRepository;
 import com.facecheck.backend.repository.ClassRepository;
 import com.facecheck.backend.repository.UserRepository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -131,7 +134,7 @@ public class AttendanceController {
                         break;
                     }
                 }
-            } catch (Exception e) {
+            } catch (JsonProcessingException e) {
                 logger.error("Error parsing face JSON", e);
                 response.put("message", "เกิดข้อผิดพลาดในการอ่านข้อมูลใบหน้าจากระบบ");
                 return ResponseEntity.status(500).body(response);
@@ -154,7 +157,7 @@ public class AttendanceController {
                         List<Map<String, Object>> scheduledDates = mapper.readValue(scheduledDatesJson, new TypeReference<List<Map<String, Object>>>(){});
                         isClassDay = scheduledDates.stream()
                                 .anyMatch(d -> LocalDate.parse(d.get("date").toString()).equals(nowDate));
-                    } catch (Exception e) {
+                    } catch (JsonProcessingException | DateTimeParseException e) {
                         logger.error("Error parsing scheduled dates", e);
                     }
                 }
@@ -164,7 +167,8 @@ public class AttendanceController {
                     return ResponseEntity.status(403).body(response);
                 }
 
-                int lateMin = classInfo.getLateThresholdMinutes() != null ? classInfo.getLateThresholdMinutes() : 15;
+                Integer lateThreshold = classInfo.getLateThresholdMinutes();
+                int lateMin = lateThreshold != null ? lateThreshold : 15;
                 LocalTime lateStartTime = classInfo.getStartTime().plusMinutes(lateMin);
                 LocalTime absentStartTime = classInfo.getEndTime();
 
@@ -355,7 +359,7 @@ public class AttendanceController {
                             result.add(absentRecord);
                         }
                     }
-                } catch (Exception ex) {
+                } catch (JsonProcessingException | DateTimeParseException ex) {
                     logger.error("Error parsing scheduledDates for class " + classId, ex);
                 }
             }
@@ -410,7 +414,7 @@ public class AttendanceController {
                             absent++;
                         }
                     }
-                } catch (Exception e) {
+                } catch (JsonProcessingException | DateTimeParseException e) {
                     logger.error("Error calculating absent count", e);
                 }
             }

@@ -1,18 +1,27 @@
 package com.facecheck.backend.controller;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.facecheck.backend.entity.ClassEntity;
 import com.facecheck.backend.entity.ClassStudent;
 import com.facecheck.backend.entity.Notification;
 import com.facecheck.backend.repository.ClassRepository;
 import com.facecheck.backend.repository.ClassStudentRepository;
 import com.facecheck.backend.repository.NotificationRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -105,7 +114,7 @@ public class NotificationController {
                     }
                     classEntity.setScheduledDates(mapper.writeValueAsString(filteredDates));
                     classRepository.save(classEntity);
-                } catch (Exception jsonEx) {
+                } catch (JsonProcessingException | ClassCastException jsonEx) {
                     // ถ้า parse JSON ไม่ได้ ก็ข้ามไป (ไม่กระทบการส่งแจ้งเตือน)
                     System.err.println("ไม่สามารถอัปเดต scheduledDates: " + jsonEx.getMessage());
                 }
@@ -130,7 +139,7 @@ public class NotificationController {
             }
 
             return ResponseEntity.ok(Map.of("message", "ยกเลิกคลาสสำเร็จ ลบวันนี้ออกจากตารางแล้ว และส่งแจ้งเตือนให้นักศึกษา " + count + " คน"));
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(Map.of("message", "ส่งแจ้งเตือนไม่สำเร็จ: " + e.getMessage()));
         }
     }
