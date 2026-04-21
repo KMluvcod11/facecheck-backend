@@ -39,8 +39,10 @@ public class AuthController {
             if (request.getStudentId() != null && !request.getStudentId().isEmpty()) {
                 userOpt = userRepository.findByStudentId(request.getStudentId());
             }
-            // อาจารย์: ค้นหาจาก username
-            else {
+            // อาจารย์: ค้นหาจาก email (หรือ username เผื่อระบบเก่า)
+            else if (request.getEmail() != null && !request.getEmail().isEmpty()) {
+                userOpt = userRepository.findByEmail(request.getEmail());
+            } else {
                 userOpt = userRepository.findByUsername(request.getUsername());
             }
 
