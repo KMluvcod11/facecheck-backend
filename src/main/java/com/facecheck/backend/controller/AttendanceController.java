@@ -247,12 +247,20 @@ public class AttendanceController {
                 Map<String, Object> item = new HashMap<>();
                 item.put("userId", record.getStudentId().toString());
                 Optional<User> userOpt = userRepository.findById(record.getStudentId());
-                item.put("studentId", userOpt.isPresent() ? userOpt.get().getStudentId() : null);
+                if (userOpt.isPresent()) {
+                    item.put("studentId", userOpt.get().getStudentId());
+                    item.put("studentCode", userOpt.get().getStudentId());
+                    item.put("studentName", userOpt.get().getFullName());
+                }
+                // ✅ ส่ง status เป็นตัวเล็กเสมอ เพื่อให้ตรงกับ Frontend
                 String status = record.getStatus();
-                if ("on_time".equals(status)) status = "PRESENT";
-                else if (status != null) status = status.toUpperCase();
+                if ("on_time".equals(status)) status = "present";
+                else if (status != null) status = status.toLowerCase();
                 item.put("status", status);
                 item.put("checkedAt", record.getCheckedAt() != null ? record.getCheckedAt().toString() : null);
+                if (record.getCheckedAt() != null) {
+                    item.put("time", record.getCheckedAt().toLocalTime().toString().substring(0, 5));
+                }
                 result.add(item);
             }
             return ResponseEntity.ok(result);
@@ -398,6 +406,7 @@ public class AttendanceController {
 
         // คำนวณ absent จาก scheduledDates ที่ผ่านมาแล้ว
         int absent = 0;
+        int leave = 0;
         Optional<ClassEntity> classOpt = classRepository.findById(classId);
         if (classOpt.isPresent()) {
             String scheduledJson = classOpt.get().getScheduledDates();
@@ -420,10 +429,16 @@ public class AttendanceController {
             }
         }
 
+        for (Attendance a : studentAttendances) {
+            String status = a.getStatus() != null ? a.getStatus().trim().toLowerCase() : "";
+            if (status.equals("leave")) leave++;
+        }
+
         Map<String, Object> stats = new HashMap<>();
         stats.put("present", present);
         stats.put("late", late);
         stats.put("absent", absent);
+        stats.put("leave", leave);
         return ResponseEntity.ok(stats);
     }
 }

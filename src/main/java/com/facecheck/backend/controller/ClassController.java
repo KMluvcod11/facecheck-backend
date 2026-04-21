@@ -50,8 +50,8 @@ public class ClassController {
             newClass.setScheduleDay(request.getScheduleDay());
             Integer lateThreshold = request.getLateThresholdMinutes();
             newClass.setLateThresholdMinutes(lateThreshold != null ? lateThreshold : 15);
-            Integer maxAbsences = request.getMaxAbsences();
-            newClass.setMaxAbsences(maxAbsences != null ? maxAbsences : 4);
+            newClass.setMaxAbsences(request.getMaxAbsences());
+            newClass.setTerm(request.getTerm());
 
             // แปลง String "09:00" เป็น LocalTime
             if (request.getStartTime() != null && !request.getStartTime().isEmpty()) {
