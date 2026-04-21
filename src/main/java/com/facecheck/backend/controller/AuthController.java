@@ -33,16 +33,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
-            Optional<User> userOpt;
-
-            // นักศึกษา: ค้นหาจาก studentId
-            if (request.getStudentId() != null && !request.getStudentId().isEmpty()) {
-                userOpt = userRepository.findByStudentId(request.getStudentId());
-            }
-            // อาจารย์: ค้นหาจาก username
-            else {
-                userOpt = userRepository.findByUsername(request.getUsername());
-            }
+            // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษา = รหัสนักศึกษา, อาจารย์ = ตั้งเอง)
+            Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
 
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
@@ -74,12 +66,18 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         User newUser = new User();
-        newUser.setEmail(request.getEmail());       // นักศึกษาจะมี email (studentId@utcc.ac.th)
-        newUser.setUsername(request.getUsername()); // อาจารย์จะมี username
+        newUser.setUsername(request.getUsername()); // นักศึกษา = รหัสนักศึกษา, อาจารย์ = ตั้งเอง
         newUser.setPasswordHash(request.getPassword());
         newUser.setFullName(request.getFullName());
-        newUser.setStudentId(request.getStudentId());
         newUser.setRole(request.getRole());
+
+        // ล็อค studentId ให้ตรงกับ username สำหรับนักศึกษาเสมอ
+        // อาจารย์ไม่มี studentId
+        if ("student".equalsIgnoreCase(request.getRole())) {
+            newUser.setStudentId(request.getUsername());
+        } else {
+            newUser.setStudentId(null);
+        }
 
         // ✅ อัปเดต: แปลง List<List<Double>> เป็น String แบบ JSON
         if (request.getFaceDescriptor() != null && !request.getFaceDescriptor().isEmpty()) {
