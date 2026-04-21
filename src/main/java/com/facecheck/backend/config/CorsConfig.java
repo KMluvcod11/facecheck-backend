@@ -10,7 +10,14 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5173", "http://localhost:5174", "https://facecheck-utcc.netlify.app") // อนุญาตให้ React ทั้ง local และ Netlify เข้าถึงได้
+                // อนุญาต local, Netlify และ Vercel (รวม preview deployments) ให้เข้าถึงได้
+                .allowedOriginPatterns(
+                        "http://localhost:5173",
+                        "http://localhost:5174",
+                        "https://facecheck-utcc.netlify.app",
+                        "https://facecheck-web.vercel.app",
+                        "https://facecheck-web-*.vercel.app"
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);
