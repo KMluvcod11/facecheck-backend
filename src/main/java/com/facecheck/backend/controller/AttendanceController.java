@@ -145,8 +145,8 @@ public class AttendanceController {
                 return ResponseEntity.status(401).body(response);
             }
 
-            // 5. คำนวณสถานะเวลา
-            String status = "on_time";
+            // 5. คำนวณสถานะเวลา (ใช้ 'present' เพื่อให้ตรงกับ DB CHECK constraint)
+            String status = "present";
             if (classInfo.getStartTime() != null) {
                 // 5.1 ตรวจสอบตารางเรียน scheduledDates
                 String scheduledDatesJson = classInfo.getScheduledDates();
