@@ -192,7 +192,7 @@ public class NotificationController {
             Notification notif = new Notification();
             notif.setUserId(studentUserId);
             notif.setType("danger"); // ให้เป็นสีแดง (เตือนอันตราย)
-            notif.setTitle("⚠️ แจ้งเตือนความเสี่ยงหมดสิทธิ์สอบ");
+            notif.setTitle("⚠️ แจ้งเตือนความเสี่ยงการเข้าเรียน");
             notif.setMessage(message);
             notif.setIsRead(false);
 
