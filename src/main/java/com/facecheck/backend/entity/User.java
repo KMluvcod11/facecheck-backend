@@ -13,6 +13,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+/**
+ * โครงสร้างฐานข้อมูลตาราง `users` (ตารางผู้ใช้งาน)
+ * ใช้สำหรับเก็บข้อมูลบัญชีผู้ใช้ระบบ ทั้งสถานะ "นักศึกษา" และ "อาจารย์"
+ */
 @Entity
 @Table(name = "users")
 @Data

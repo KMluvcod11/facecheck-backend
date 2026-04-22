@@ -30,17 +30,24 @@ public class AuthController {
     @Autowired
     private UserRepository userRepository;
 
+    /**
+     * ระบบล็อกอินสำหรับทั้งนักศึกษาและอาจารย์
+     * เมื่อล็อกอินสำเร็จ ระบบจะส่ง Token คืนไปให้เพื่อนำไปใช้งานอื่นๆ
+     *
+     * @param request ข้อมูลที่ส่งมา (Username และ Password)
+     * @return ข้อมูลบัญชีผู้ใช้ พร้อมับ Token ควบคุมสิทธิ์
+     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
-            // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษา = รหัสนักศึกษา, อาจารย์ = ตั้งเอง)
+            // 1. ค้นหาผู้ใช้จากระบบด้วย Username (นักศึกษา = รหัสนักศึกษา, อาจารย์ = ชื่อที่ตั้งอง)
             Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
 
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                // เช็กรหัสผ่าน (กัน Error null)
+                // 2. เช็กรหัสผ่านว่าตรงกับในฐานข้อมูลหรือไม่
                 if (request.getPassword() != null && request.getPassword().equals(user.getPasswordHash())) {
-                    // สร้าง simple session token: Base64(userId:timestamp)
+                    // 3. สร้าง Token สุ่มจำลอง (Base64 ของ userId + เวลาปัจจุบัน)
                     String raw = user.getId() + ":" + System.currentTimeMillis();
                     String token = Base64.getEncoder().encodeToString(raw.getBytes());
 
@@ -63,23 +70,31 @@ public class AuthController {
         }
     }
 
+    /**
+     * ระบบแสกนหน้าและสมัครสมาชิก (ลงทะเบียน) สำหรับนักศึกษาและอาจารย์
+     * จะมีการแปลงข้อมูลกราฟใบหน้า (Face Descriptor) ให้เก็บลงฐานข้อมูลได้
+     *
+     * @param request ข้อมูลผู้สมัคร (ชื่อ, รหัส, บทบาท และ ข้อมูลใบหน้า ฯลฯ)
+     * @return ข้อความยืนยันการสมัคร
+     */
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
+        // 1. สร้างพื้นที่เก็บข้อมูลสำหรับผู้ใช้ใหม่
         User newUser = new User();
         newUser.setUsername(request.getUsername()); // นักศึกษา = รหัสนักศึกษา, อาจารย์ = ตั้งเอง
         newUser.setPasswordHash(request.getPassword());
         newUser.setFullName(request.getFullName());
         newUser.setRole(request.getRole());
 
-        // ล็อค studentId ให้ตรงกับ username สำหรับนักศึกษาเสมอ
-        // อาจารย์ไม่มี studentId
+        // 2. จำกัดขอบเขต: หากเป็นนักศึกษา ให้ล๊อกพารามิเตอร์ studentId ให้ตรงกับ Username เสมอ
+        // (ส่วนอาจารย์จะไม่ใช้ field นี้)
         if ("student".equalsIgnoreCase(request.getRole())) {
             newUser.setStudentId(request.getUsername());
         } else {
             newUser.setStudentId(null);
         }
 
-        // ✅ อัปเดต: แปลง List<List<Double>> เป็น String แบบ JSON
+        // 3. แปลงข้อมูล AI ใบหน้า (List<Double>) ให้อยู่ในฟอร์แมต String (JSON) เพื่อให้เซฟลง Database ได้
         if (request.getFaceDescriptor() != null && !request.getFaceDescriptor().isEmpty()) {
             try {
                 // ใช้ ObjectMapper แปลงโครงสร้างที่ซับซ้อนให้เป็น String 

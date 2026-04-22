@@ -39,11 +39,19 @@ public class ClassStudentController {
     // ==========================================
     // GET /api/class-students/{classId} — ดึงรายชื่อนักศึกษาในคลาส
     // ==========================================
+
+    /**
+     * ดึงรายชื่อของนักศึกษาทั้งหมดที่อยู่ในคลาสเรียนนั้นๆ
+     * (ใช้เพื่อแสดงผลสรุปในหน้าจัดการคลาสของอาจารย์)
+     *
+     * @param classId รหัสคลาสเรียนที่ต้องการดูนักศึกษา
+     * @return รายชื่อนักศึกษา รหัส และ UUID ของแต่ละคน
+     */
     @GetMapping("/{classId}")
     public ResponseEntity<?> getStudentsByClass(@PathVariable UUID classId) {
         List<ClassStudent> classStudents = classStudentRepository.findByClassId(classId);
 
-        // ดึงข้อมูล User ของแต่ละ studentId
+        // 1. นำรายชื่อที่ได้ มาจับคู่กับข้อมูล User เพื่อเอาชื่อ-นามสกุลไปแสดงผล
         List<Map<String, Object>> result = new ArrayList<>();
         for (ClassStudent cs : classStudents) {
             var userOpt = userRepository.findById(cs.getStudentId());
@@ -64,6 +72,13 @@ public class ClassStudentController {
     // ==========================================
     // POST /api/class-students — เพิ่มนักศึกษาเข้าคลาส (ด้วยรหัสนักศึกษา)
     // ==========================================
+
+    /**
+     * ดึงนักศึกษาเข้ามาในคลาสเรียน โดยการใช้ "รหัสนักศึกษา" (เช่น 2310511...) (ฟีเจอร์นี้อาจารย์ใช้ดึงเด็กเข้าห้อง)
+     *
+     * @param request จะประกอบด้วย classId และ studentId (รหัสที่นักศึกษาใช้)
+     * @return ผลการเพิ่มเข้าห้อง
+     */
     @PostMapping
     public ResponseEntity<?> addStudentToClass(@RequestBody Map<String, String> request) {
         try {
@@ -109,6 +124,14 @@ public class ClassStudentController {
     // ==========================================
     // DELETE /api/class-students/{classId}/{studentUserId} — ลบนักศึกษาออกจากคลาส
     // ==========================================
+
+    /**
+     * เตะนักศึกษาคนนี้ออกจากคลาสเรียน
+     *
+     * @param classId รหัส UUID ของคลาสเรียน
+     * @param studentUserId รหัส UUID ของนักศึกษาที่จะเตะออก
+     * @return ผลลัพธ์การลบ
+     */
     @Transactional
     @DeleteMapping("/{classId}/{studentUserId}")
     public ResponseEntity<?> removeStudentFromClass(
@@ -135,6 +158,13 @@ public class ClassStudentController {
     // ==========================================
     // GET /api/class-students/student/{studentUserId} — ดึงคลาสทั้งหมดของนักศึกษา
     // ==========================================
+
+    /**
+     * ดึงข้อมูลว่า "นักศึกษาคนนี้" ปัจจุบันได้ลงทะเบียนเรียนในวิชาอะไรบ้างแล้ว
+     *
+     * @param studentUserId UUID ของนักศึกษา
+     * @return ลิสต์รายวิชาทั้งหมดที่เรียน
+     */
     @GetMapping("/student/{studentUserId}")
     public ResponseEntity<?> getClassesForStudent(@PathVariable UUID studentUserId) {
         // ดึงรายการว่านักศึกษาคนนี้อยู่ในคลาสไหนบ้าง
@@ -162,6 +192,13 @@ public class ClassStudentController {
     // ==========================================
     // ✅ POST /api/class-students/join — นักศึกษากดเข้าร่วมคลาสเอง (ด้วยรหัสวิชา)
     // ==========================================
+
+    /**
+     * ให้นักศึกษาสามารถพิมพ์ "รหัสวิชา" เพื่อเข้าร่วมคลาสได้ด้วยตัวเอง
+     *
+     * @param request รับค่ารหัสวิชา (subjectCode) และ รหัสนักศึกษา (studentId)
+     * @return แจ้งว่าเข้าร่วมสำเร็จหรือมีปัญหาใดมั้ย
+     */
     @PostMapping("/join")
     public ResponseEntity<?> joinClassBySubjectCode(@RequestBody Map<String, String> request) {
         try {

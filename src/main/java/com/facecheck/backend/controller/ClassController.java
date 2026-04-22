@@ -39,6 +39,14 @@ public class ClassController {
     // ==========================================
     // POST /api/classes — สร้างคลาสใหม่
     // ==========================================
+
+    /**
+     * สร้างคลาสเรียนใหม่โดยอาจารย์
+     * ข้อมูลที่รับเข้ามาจะได้แก่ ชื่อวิชา, รหัสวิชา, ห้อง, และตั้งค่าเงื่อนไขเวลาเข้าเรียน
+     *
+     * @param request ข้อมูลรายละเอียดของคลาสที่จะสร้าง
+     * @return ข้อมูลคลาสที่สร้างสำเร็จ 
+     */
     @PostMapping
     public ResponseEntity<?> createClass(@RequestBody CreateClassRequest request) {
         try {
@@ -49,11 +57,12 @@ public class ClassController {
             newClass.setRoom(request.getRoom());
             newClass.setScheduleDay(request.getScheduleDay());
             Integer lateThreshold = request.getLateThresholdMinutes();
+            // 1. ตั้งค่าการสายอัตโนมัติที่ 15 นาทีหากไม่ได้ส่งมา
             newClass.setLateThresholdMinutes(lateThreshold != null ? lateThreshold : 15);
             newClass.setMaxAbsences(request.getMaxAbsences());
             newClass.setTerm(request.getTerm());
 
-            // แปลง String "09:00" เป็น LocalTime
+            // 2. แปลง String รูปแบบเวลา (เช่น "09:00") ไปเป็นชนิดตัวแปร LocalTime ของ Java ที่ระบบเข้าใจ
             if (request.getStartTime() != null && !request.getStartTime().isEmpty()) {
                 newClass.setStartTime(LocalTime.parse(request.getStartTime()));
             }
@@ -61,6 +70,7 @@ public class ClassController {
                 newClass.setEndTime(LocalTime.parse(request.getEndTime()));
             }
 
+            // 3. เซฟลงฐานข้อมูลหลัก
             ClassEntity saved = classRepository.save(newClass);
 
             Map<String, Object> response = new HashMap<>();
@@ -78,6 +88,13 @@ public class ClassController {
     // ==========================================
     // GET /api/classes/teacher/{teacherId} — ดึงคลาสทั้งหมดของอาจารย์
     // ==========================================
+
+    /**
+     * ดึงรายการคลาสทั้งหมดที่อาจารย์คนนี้เป็นผู้สอน
+     *
+     * @param teacherId รหัส UUID ของอาจารย์
+     * @return ลิสต์รายการคลาสทั้งหมด
+     */
     @GetMapping("/teacher/{teacherId}")
     public ResponseEntity<?> getClassesByTeacher(@PathVariable UUID teacherId) {
         List<ClassEntity> classes = classRepository.findByTeacherId(teacherId);
@@ -87,6 +104,13 @@ public class ClassController {
     // ==========================================
     // GET /api/classes/{id} — ดึงข้อมูลคลาสตาม ID
     // ==========================================
+
+    /**
+     * ดึงข้อมูลคลาสเรียนเจาะจงรายวิชา (ดูรายละเอียดเชิงลึกของวิชา)
+     *
+     * @param id รหัส UUID ของคลาสเรียน
+     * @return ข้อมูลรายละเอียดของคลาสนั้นๆ
+     */
     @GetMapping("/{id}")
     public ResponseEntity<?> getClassById(@PathVariable UUID id) {
         var classOpt = classRepository.findById(id);
@@ -101,6 +125,14 @@ public class ClassController {
     // ==========================================
     // PUT /api/classes/{id} — อัปเดตข้อมูลคลาส
     // ==========================================
+
+    /**
+     * อัปเดตข้อมูลของคลาสเรียน (เช่น เปลี่ยนห้อง, เปลี่ยนเวลา, ตั้งค่าพิกัด GPS ใหม่ หรือลบวันหยุดออก)
+     *
+     * @param id รหัส UUID ของคลาสเรียน
+     * @param request ข้อมูลใหม่ที่ต้องการจะแก้ไข
+     * @return ข้อมูลคลาสตัวที่ถูกเซฟใหม่เรียบร้อยแล้ว
+     */
     @PutMapping("/{id}")
     public ResponseEntity<?> updateClass(@PathVariable UUID id, @RequestBody CreateClassRequest request) {
         try {
@@ -113,6 +145,7 @@ public class ClassController {
 
             ClassEntity existing = classOpt.get();
 
+            // 1. ตรวจสอบว่าพารามิเตอร์ไหนที่ถูกส่งเข้ามาบ้าง ถ้าส่งมาให้อัปเดตค่าเดิม
             if (request.getSubjectName() != null) existing.setSubjectName(request.getSubjectName());
             if (request.getSubjectCode() != null) existing.setSubjectCode(request.getSubjectCode());
             if (request.getRoom() != null) existing.setRoom(request.getRoom());
@@ -129,7 +162,7 @@ public class ClassController {
             if (request.getInstructorName() != null) {
                 existing.setInstructorName(request.getInstructorName());
 
-                // อัปเดตโปรไฟล์อาจารย์ในบัญชีหลักด้วย (หน้าเว็บจะได้โชว์ชื่อตรงกันแม้ตอนล็อกอินใหม่)
+                // 2. อัปเดตโปรไฟล์อาจารย์ในตาราง Profile บัญชีหลักด้วย (หน้าเว็บจะได้โชว์ชื่อตรงกันแม้ตอนล็อกอินผ่านเครื่องอื่น)
                 if (existing.getTeacherId() != null) {
                     var userOpt = userRepository.findById(existing.getTeacherId());
                     if (userOpt.isPresent()) {
@@ -146,6 +179,8 @@ public class ClassController {
             if (request.getEndTime() != null && !request.getEndTime().isEmpty()) {
                 existing.setEndTime(LocalTime.parse(request.getEndTime()));
             }
+            
+            // 3. อัปเดตตารางปฏิทินที่อาจารย์แก้ไข (อาจจะมีการเพิ่ม หรือกดยกเลิกคลาสในวันนั้นๆ)
             if (request.getScheduledDates() != null) {
                 existing.setScheduledDates(request.getScheduledDates());
             }
@@ -166,6 +201,13 @@ public class ClassController {
     // ==========================================
     // DELETE /api/classes/{id} — ลบคลาส
     // ==========================================
+
+    /**
+     * ลบคลาสเรียนทิ้งออกจากระบบ (จะกระทบข้อมูลอื่นๆ ด้วย)
+     * มีการจัดลำดับการลบจาก Foreign Keys ให้ถูกต้องเพื่อป้องกัน Database Error
+     *
+     * @param id รหัสคลาสเรียนที่ต้องการจะลบ
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteClass(@PathVariable UUID id) {
         try {

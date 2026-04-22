@@ -11,6 +11,12 @@ import java.util.Map;
 @RequestMapping("/api") // Base URL สำหรับ API ทั้งหมดในคลาสนี้
 public class TestController {
 
+    /**
+     * API ทดสอบการเชื่อมต่อ
+     * เอาไว้เปิดในเบราว์เซอร์ดูว่าเซิร์ฟเวอร์รันติดและพร้อมทำงานหรือยัง
+     *
+     * @return ข้อความสวัสดี
+     */
     @GetMapping("/hello")
     public Map<String, String> sayHello() {
         Map<String, String> response = new HashMap<>();

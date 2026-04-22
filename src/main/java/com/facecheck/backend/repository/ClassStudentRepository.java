@@ -18,7 +18,7 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, UUID
     // ลบนักศึกษาออกจากคลาส
     void deleteByClassIdAndStudentId(UUID classId, UUID studentId);
 
-    // ✅ บรรทัดที่เราเพิ่มเข้ามาใหม่ (ใช้หาว่านักศึกษาคนนี้ ลงเรียนคลาสไหนบ้าง)
+    // บรรทัดที่เราเพิ่มเข้ามาใหม่ (ใช้หาว่านักศึกษาคนนี้ ลงเรียนคลาสไหนบ้าง)
     List<ClassStudent> findByStudentId(UUID studentId);
 
     // เพิ่มบรรทัดนี้ลงไป (ใช้สำหรับลบเด็กทุกคนออกจากคลาส)

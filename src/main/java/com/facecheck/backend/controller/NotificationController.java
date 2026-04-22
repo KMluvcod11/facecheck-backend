@@ -39,6 +39,14 @@ public class NotificationController {
     // ==========================================
     // GET /api/notifications/user/{userId} — ดึงแจ้งเตือนของ User
     // ==========================================
+
+    /**
+     * ดึงข้อมูลการแจ้งเตือน (กระดิ่ง) ของผู้ใช้คนนั้นๆ ทั้งหมด
+     * (ดึงใบลา ดึงแจ้งเตือนยกคลาส ดึงเตะออกจากคลาส ฯลฯ)
+     *
+     * @param userId รหัส UUID ของผู้ใช้ (นักศึกษา หรือ อาจารย)
+     * @return รายการแจ้งเตือนทั้งหมด เรียงจากใหม่ไปเก่า
+     */
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserNotifications(@PathVariable UUID userId) {
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -48,6 +56,13 @@ public class NotificationController {
     // ==========================================
     // PUT /api/notifications/{id}/read — อัพเดทว่าอ่านแล้ว
     // ==========================================
+
+    /**
+     * เปลี่ยนสถานะการแจ้งเตือน 1 ชิ้นว่า "อ่านแล้ว" (Read) เพื่อให้จุดแดงหายไป
+     *
+     * @param id รหัส UUID ของการแจ้งเตือน
+     * @return อัปเดตสำเร็จหรือไม่
+     */
     @PutMapping("/{id}/read")
     public ResponseEntity<?> markAsRead(@PathVariable UUID id) {
         var notifOpt = notificationRepository.findById(id);
@@ -63,6 +78,13 @@ public class NotificationController {
     // ==========================================
     // PUT /api/notifications/user/{userId}/read-all — อ่านทั้งหมด
     // ==========================================
+
+    /**
+     * ผู้ใช้กดปุ่ม "อ่านทั้งหมด" ระบบจะกวาดล้างจุดแดงของการแจ้งเตือนทุกชิ้น
+     *
+     * @param userId รหัส UUID ของผู้ใช้
+     * @return จำนวนหรือข้อความสำเร็จ
+     */
     @PutMapping("/user/{userId}/read-all")
     public ResponseEntity<?> markAllAsRead(@PathVariable UUID userId) {
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -78,6 +100,13 @@ public class NotificationController {
     // ==========================================
     // DELETE /api/notifications/{id} — ลบแจ้งเตือน
     // ==========================================
+
+    /**
+     * ผู้ใช้เลือก "ลบ" การแจ้งเตือนนี้ทิ้งจากกล่องจดหมายถาวร
+     *
+     * @param id รหัส UUID ของการแจ้งเตือน
+     * @return ลบสำเร็จหรือไม่
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteNotification(@PathVariable UUID id) {
         if (!notificationRepository.existsById(id)) {
@@ -90,6 +119,14 @@ public class NotificationController {
     // ==========================================
     // POST /api/notifications/cancel-class/{classId} — แจ้งเตือนยกคลาส
     // ==========================================
+
+    /**
+     * ฟังก์ชันพิเศษ: สำหรับอาจารย์กด "ยกเลิกคลาส" ของวันนี้
+     * ระบบจะลบวันที่ออกจากปฏิทิน และส่งแจ้งเตือนสีแดงให้นักศึกษาทุกคนรู้
+     *
+     * @param classId รหัส UUID ของคลาสที่จะยกเลิก
+     * @return ส่งแจ้งเตือนสำเร็จกี่คน
+     */
     @PostMapping("/cancel-class/{classId}")
     public ResponseEntity<?> notifyCancelClass(@PathVariable UUID classId) {
         try {
@@ -120,11 +157,13 @@ public class NotificationController {
                 }
             }
 
+            // 2. ดึงรายชื่อนักศึกษาในห้อง เพื่อเตรียมส่งแจ้งเตือนรายบุคคล
             List<ClassStudent> students = classStudentRepository.findByClassId(classId);
             if (students.isEmpty()) {
                 return ResponseEntity.ok(Map.of("message", "ยกเลิกคลาสแล้ว แต่ไม่มีนักศึกษาในคลาสนี้ให้แจ้งเตือน"));
             }
 
+            // 3. วนลูปส่งการแจ้งเตือนสีแดงให้นักศึกษาทีละคน
             int count = 0;
             for (ClassStudent cs : students) {
                 Notification notif = new Notification();
@@ -147,6 +186,14 @@ public class NotificationController {
     // ==========================================
     // ✅ POST /api/notifications/start-checkin/{classId} — แจ้งเตือนเริ่มเช็คชื่อ
     // ==========================================
+
+    /**
+     * ฟังก์ชันพิเศษ: สำหรับอาจารย์กด "เริ่มเช็คชื่อ"
+     * ระบบออโต้จะยิงแจ้งเตือนเด้งไปหานักศึกษาทุกคนให้เตรียมตัวส่งหน้าสแกน
+     *
+     * @param classId รหัส UUID ของวิชาที่เปิดเช็คชื่อ
+     * @return จำนวนคนที่ได้รับแจ้งเตือน
+     */
     @PostMapping("/start-checkin/{classId}")
     public ResponseEntity<?> notifyStartCheckIn(@PathVariable UUID classId) {
         try {
@@ -156,11 +203,13 @@ public class NotificationController {
             }
             ClassEntity classEntity = classOpt.get();
 
+            // 1. ดึงนักศึกษาทั้งหมดในคลาส
             List<ClassStudent> students = classStudentRepository.findByClassId(classId);
             if (students.isEmpty()) {
                 return ResponseEntity.ok(Map.of("message", "ไม่มีนักศึกษาในคลาสนี้ให้แจ้งเตือน"));
             }
 
+            // 2. ส่ง Notification แจ้งเตือนสีฟ้าไปยังแต่ละคน
             int count = 0;
             for (ClassStudent cs : students) {
                 Notification notif = new Notification();
@@ -183,6 +232,14 @@ public class NotificationController {
     // ==========================================
     // ✅ POST /api/notifications/ai-alert — ส่งแจ้งเตือน AI เข้าระบบนักศึกษาแบบเจาะจง
     // ==========================================
+
+    /**
+     * เปิดช่องทาง API ให้ออโต้บอท (AI/n8n) ยิงแจ้งเตือนเตือนนักศึกษา
+     * ว่าขาดเรียนบ่อย หรือใกล้หมดสิทธิ์สอบ
+     *
+     * @param payload ข้อมูลที่รับมาประกอบด้วย รหัสนักศึกษา (studentUserId) และข้อความ (message)
+     * @return ผลการยิงแจ้งเตือน 
+     */
     @PostMapping("/ai-alert")
     public ResponseEntity<?> sendAiAlert(@RequestBody Map<String, Object> payload) {
         try {

@@ -15,9 +15,15 @@ public class MockDataController {
     @Autowired
     private UserRepository userRepository;
 
+    /**
+     * ดัมมี่ API (API จำลอง) สำหรับใช้สร้างยูสเซอร์ทดสอบ 
+     * ไว้ใช้เวลาระบบลบข้อมูลเกลี้ยง แล้วอยากเทสต์ทันที
+     *
+     * @return ข้อความยืนยันการตั้งค่าจำลอง
+     */
     @GetMapping("/create-user")
     public String createMockUser() {
-        // เช็กก่อนว่ามีอาจารย์หรือยัง
+        // 1. เช็กก่อนว่ามีอาจารย์ "teacher01" หรือยัง ถ้ายังก็สร้างใหม่เลย
         if (userRepository.findByUsername("teacher01").isEmpty()) {
             User teacher = new User();
             teacher.setUsername("teacher01");

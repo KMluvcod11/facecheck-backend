@@ -46,6 +46,13 @@ public class AttendanceController {
 
     private static final double FACE_MATCH_THRESHOLD = 0.45;
 
+    /**
+     * รับข้อมูลพิกัด GPS และรูปใบหน้า เพื่อเช็กชื่อนักศึกษาเข้าเรียน
+     * มีการคำนวณระยะห่างด้วย GPS และความจำจากการสแกนใบหน้า
+     *
+     * @param request ข้อมูลคำขอเช็กชื่อ ประกอบด้วย รหัสนักศึกษา, รหัสคลาส, พิกัด GPS และ Vector ใบหน้า
+     * @return ผลลัพธ์การเช็กชื่อ (สำเร็จ/ไม่สำเร็จ พร้อมสถานะการมาเรียน)
+     */
     @PostMapping("/check-in")
     public ResponseEntity<?> checkIn(@RequestBody CheckInRequest request) {
         Map<String, Object> response = new HashMap<>();
@@ -207,8 +214,17 @@ public class AttendanceController {
         }
     }
 
-    // --- Helper Methods ---
+    // --- Helper Methods (ฟังก์ชันช่วยเหลือ) ---
 
+    /**
+     * คำนวณระยะห่างระหว่างจุด 2 จุด (ใช้เปรียบเทียบความเหมือนของใบหน้า 2 รูป)
+     * นำเอา Vector จากรูปใบหน้าที่สแกน มาเทียบกับ Vector ใบหน้าที่บันทึกไว้ในระบบ
+     * ยิ่งค่าน้อยยิ่งแปลว่าใบหน้าคล้ายกันมาก
+     *
+     * @param desc1 Vector ของใบหน้าตัวแรก
+     * @param desc2 Vector ของใบหน้าตัวที่สอง
+     * @return ระยะห่าง (Distance) 
+     */
     private double calculateEuclideanDistance(List<Double> desc1, List<Double> desc2) {
         if (desc1.size() != desc2.size()) return 999.0;
         double sum = 0.0;
@@ -219,6 +235,16 @@ public class AttendanceController {
         return Math.sqrt(sum);
     }
 
+    /**
+     * คำนวณระยะทางบนโลกจริงระหว่างพิกัด GPS 2 จุด (ละติจูด, ลองจิจูด)
+     * ใช้สูตร Haversine formula
+     * 
+     * @param lat1 ละติจูดของจุดที่ตั้งคลาส
+     * @param lon1 ลองจิจูดของจุดที่ตั้งคลาส
+     * @param lat2 ละติจูดของนักศึกษาตอนที่กำลังกดเช็กชื่อ
+     * @param lon2 ลองจิจูดของนักศึกษาตอนที่กำลังกดเช็กชื่อ
+     * @return ระยะห่างเป็น "เมตร"
+     */
     private double calculateGPSDistance(double lat1, double lon1, double lat2, double lon2) {
         final int R = 6371000;
         double latDistance = Math.toRadians(lat2 - lat1);
@@ -230,10 +256,20 @@ public class AttendanceController {
         return R * c;
     }
 
+    /**
+     * ดึงข้อมูลประวัติผู้ที่เช็กชื่อเข้าเรียนในคลาสนั้นๆ
+     * (ดึงได้ทั้งหมดหรือเฉพาะวันนั้นๆ หากส่ง Date มาด้วย)
+     *
+     * @param classId รหัสคลาสเรียน
+     * @param date (ทางเลือก) วันที่ต้องการกรองข้อมูล หากไม่ระบุจะดึงทั้งหมด
+     * @return รายชื่อและสถานะของผู้ที่เช็กชื่อเข้าเรียน
+     */
     @GetMapping("/class/{classId}")
     public ResponseEntity<?> getClassAttendance(@PathVariable java.util.UUID classId, @RequestParam(required = false) String date) {
         try {
             List<Attendance> records;
+            
+            // 1. ตรวจสอบว่าต้องการดูทั้งหมด หรือดูเจาะจงรายวัน
             if (date != null && !date.isEmpty()) {
                 java.time.LocalDate localDate = java.time.LocalDate.parse(date);
                 LocalDateTime startOfDay = localDate.atStartOfDay();
@@ -242,7 +278,10 @@ public class AttendanceController {
             } else {
                 records = attendanceRepository.findByClassId(classId);
             }
+            
             List<Map<String, Object>> result = new java.util.ArrayList<>();
+            
+            // 2. ลูปวนเช็กชื่อผู้เข้าเรียนในประวัติ เพื่อดึงข้อมูลชื่อ-นามสกุลไปแสดงผล
             for (Attendance record : records) {
                 Map<String, Object> item = new HashMap<>();
                 item.put("userId", record.getStudentId().toString());
@@ -269,14 +308,26 @@ public class AttendanceController {
         }
     }
 
+    /**
+     * ดึงข้อมูลรายชื่อนักศึกษาที่เช็กชื่อในรายวัน (ใช้เพื่อดูสถิติแยกตามวัน)
+     *
+     * @param classId รหัสคลาสเรียน
+     * @param date วันที่ต้องการดูข้อมูล 
+     * @return รายชื่อนักเรียนและเวลาที่เข้าเรียนในวันนั้นๆ
+     */
     @GetMapping("/class/{classId}/daily")
     public ResponseEntity<?> getDailyAttendance(@PathVariable java.util.UUID classId, @RequestParam String date) {
         try {
+            // 1. กำหนดช่วงเวลาตั้งแต่เริ่มวัน ถึงสิ้นสุดวัน
             java.time.LocalDate localDate = java.time.LocalDate.parse(date);
             LocalDateTime startOfDay = localDate.atStartOfDay();
             LocalDateTime endOfDay = localDate.atTime(23, 59, 59);
+            
+            // 2. ดึงประวัติเข้าเรียนทั้งหมดที่มีเวลาอยู่ในช่วงวันนี้
             List<Attendance> records = attendanceRepository.findByClassIdAndCheckedAtBetween(classId, startOfDay, endOfDay);
             List<Map<String, Object>> result = new java.util.ArrayList<>();
+            
+            // 3. แนบข้อมูลรูปพรรณหรือชื่อตัวนักศึกษาไปในประวัติแต่ละรายการ
             for (Attendance record : records) {
                 Map<String, Object> item = new HashMap<>();
                 item.put("studentId", record.getStudentId().toString());
@@ -299,6 +350,14 @@ public class AttendanceController {
         }
     }
 
+    /**
+     * ประวัติการเข้าเรียนทั้งหมดของนักศึกษาหนึ่งคน 
+     * (ใช้นำไปแสดงผลในหน้ารายงานประวัติการเข้าเรียนของฝั่งนักศึกษา)
+     * ระบบมีฟีเจอร์คำนวณการ "ขาดเรียน" โดยอัตโนมัติหากยังไม่เช็กชื่อในวันที่ผ่านมาแล้ว
+     *
+     * @param studentId รหัส UUID ของนักเรียนในฐานข้อมูล
+     * @return ข้อมูลประวัติการเรียนทุกวิชา
+     */
     @GetMapping("/student/{studentId}")
     public ResponseEntity<?> getStudentAttendanceHistory(@PathVariable java.util.UUID studentId) {
         try {
@@ -388,6 +447,13 @@ public class AttendanceController {
         }
     }
 
+    /**
+     * ดึงภาพรวมสถิติการเข้าเรียน (มาเรียน, สาย, ลา, ขาด) ของนักศึกษาในแต่ละวิชา
+     *
+     * @param studentId รหัส UUID ของนักศึกษา
+     * @param classId รหัสคลาสเรียนที่ต้องการดูสถิติ
+     * @return จำนวนการมา, สาย, ขาด, ลา
+     */
     @GetMapping("/student/{studentId}/stats/{classId}")
     public ResponseEntity<Map<String, Object>> getStudentStats(@PathVariable java.util.UUID studentId, @PathVariable java.util.UUID classId) {
         List<Attendance> studentAttendances = attendanceRepository.findByStudentIdAndClassId(studentId, classId);

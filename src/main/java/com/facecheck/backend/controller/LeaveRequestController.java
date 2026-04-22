@@ -35,6 +35,14 @@ public class LeaveRequestController {
     // ==========================================
     // POST /api/leave-requests — นักศึกษาส่งใบลา
     // ==========================================
+
+    /**
+     * สำหรับนักศึกษากรอกข้อมูลแล้วกด "ส่งใบลา" (ลาป่วย/ลากิจ) เข้ามาในระบบ
+     * ข้อมูลที่ส่งมาจะถูกบันทึกและส่งแจ้งไปยังอาจารย์
+     *
+     * @param payload ข้อมูลใบลา เช่น ประเภทการลา, วันที่ลา, ข้อความลายลักษณ์อักษร
+     * @return ผลลัพธ์ว่าบันทึกใบลาสำเร็จหรือไม่
+     */
     @PostMapping
     public ResponseEntity<?> createLeaveRequest(@RequestBody Map<String, Object> payload) {
         try {
@@ -45,6 +53,7 @@ public class LeaveRequestController {
             String reason = payload.getOrDefault("reason", "").toString();
             String attachmentImage = payload.containsKey("attachmentImage") ? payload.get("attachmentImage").toString() : null;
 
+            // 1. ตรวจสอบว่ามีวิชาและมีผู้ใช้นี้อยู่จริงในระบบหรือไม่
             var classOpt = classRepository.findById(classId);
             if (classOpt.isEmpty()) {
                 return errorResponse(404, "ไม่พบคลาสนี้");
@@ -57,6 +66,7 @@ public class LeaveRequestController {
             }
             User student = userOpt.get();
 
+            // 2. สร้างออบเจ็กต์ใบลา (LeaveRequest) เอาไว้เตรียมเซฟลงตารางใบลา
             LeaveRequest lr = new LeaveRequest();
             lr.setStudentId(studentId);
             lr.setClassId(classId);
@@ -71,6 +81,7 @@ public class LeaveRequestController {
             lr.setSubjectCode(classEntity.getSubjectCode());
             lr.setAttachmentImage(attachmentImage);
 
+            // 3. เซฟลงฐานข้อมูลหลัก
             leaveRequestRepository.save(lr);
 
             Map<String, Object> response = new HashMap<>();
@@ -85,6 +96,13 @@ public class LeaveRequestController {
     // ==========================================
     // GET /api/leave-requests/teacher/{teacherId} — อาจารย์ดูใบลาทั้งหมด
     // ==========================================
+
+    /**
+     * ดึงใบลา "ทั้งหมด" ที่ผู้ส่งมาให้ "อาจารย์ท่านนี้" ดู (ไม่จำกัดว่าเป็นคลาสไหน)
+     *
+     * @param teacherId รหัสอาจารย์ผู้สอน
+     * @return ลิสต์ใบลาทั้งหมดที่ส่งถึงอาจารย์
+     */
     @GetMapping("/teacher/{teacherId}")
     public ResponseEntity<?> getLeaveRequestsByTeacher(@PathVariable UUID teacherId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId);
@@ -94,6 +112,14 @@ public class LeaveRequestController {
     // ==========================================
     // GET /api/leave-requests/teacher/{teacherId}/pending — อาจารย์ดูใบลาที่รอ
     // ==========================================
+
+    /**
+     * ดึงใบลาเฉพาะที่มีสถานะ "pending" (รอดำเนินการ/รออนุมัติ) 
+     * สำหรับหน้า Dashboard ให้แจ้งเตือนว่ามีใบลาค้างอยู่กี่ชิ้น
+     *
+     * @param teacherId รหัสอาจารย์ผู้สอน
+     * @return ลิสต์ใบลาที่รอการอนุมัติ 
+     */
     @GetMapping("/teacher/{teacherId}/pending")
     public ResponseEntity<?> getPendingRequests(@PathVariable UUID teacherId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByTeacherIdAndStatusOrderByCreatedAtDesc(teacherId, "pending");
@@ -103,6 +129,13 @@ public class LeaveRequestController {
     // ==========================================
     // GET /api/leave-requests/class/{classId} — ดูใบลาตามวิชา
     // ==========================================
+
+    /**
+     * ดึงคำขอลาทั้งหมดของวิชานี้ (classId) ไม่ว่าจะอยู่สถานะอะไรก็ตาม
+     *
+     * @param classId รหัส UUID ของวิชา
+     * @return ลิสต์ใบลาของคลาสนี้
+     */
     @GetMapping("/class/{classId}")
     public ResponseEntity<?> getLeaveRequestsByClass(@PathVariable UUID classId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByClassIdOrderByCreatedAtDesc(classId);
@@ -112,6 +145,13 @@ public class LeaveRequestController {
     // ==========================================
     // GET /api/leave-requests/student/{studentId} — นักศึกษาดูใบลาของตัวเอง
     // ==========================================
+
+    /**
+     * นำไปให้แสดงผลในฝั่งของนักศึกษา เพื่อดูประวัติการลาของตัวเองย้อนหลัง
+     *
+     * @param studentId รหัส UUID นักศึกษา
+     * @return ประวัติใบลาของนักศึกษาคนนี้ทั้งหมดเรียงจากใหม่ไปเก่า
+     */
     @GetMapping("/student/{studentId}")
     public ResponseEntity<?> getLeaveRequestsByStudent(@PathVariable UUID studentId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
@@ -121,6 +161,14 @@ public class LeaveRequestController {
     // ==========================================
     // PUT /api/leave-requests/{id}/approve — อนุมัติใบลา
     // ==========================================
+
+    /**
+     * อาจารย์กด "อนุมัติ" (Approve) ใบลาของนักศึกษา
+     * เมื่ออนุมัติแล้ว ระบบจะไปแก้ประวัติจาก ขาดเรียน (Absent) ให้กลายเป็น ลา (Leave) แทน
+     *
+     * @param id รหัส UUID ของใบลา
+     * @return ผลลัพธ์ว่าเปลี่ยนสถานะสำเร็จมั้ย
+     */
     @PutMapping("/{id}/approve")
     public ResponseEntity<?> approveLeaveRequest(@PathVariable UUID id) {
         try {
@@ -130,16 +178,17 @@ public class LeaveRequestController {
             }
 
             LeaveRequest lr = opt.get();
+            // 1. เปลี่ยนสถานะใบลาเป็น อนุมัติ แล้วเซฟ
             lr.setStatus("approved");
             lr.setUpdatedAt(LocalDateTime.now());
             leaveRequestRepository.save(lr);
 
-            // บันทึกสถานะ "leave" ลงใน Attendance
+            // 2. บันทึกสถานะ "leave" (ลางาน/ลาเรียน) ลงในสมุดจดชื่อ (Attendance) ของวันนั้นเผื่อไว้
             Attendance attendance = findOrCreateAttendance(lr);
             attendance.setStatus("leave");
             attendanceRepository.save(attendance);
 
-            // ส่ง Notification แจ้งนักศึกษา
+            // 3. ส่งเมล์หรือการแจ้งเตือน Notification (กระดิ่ง) ไปหานักศึกษา
             String leaveLabel = lr.getLeaveType().equals("sick") ? "ลาป่วย" : "ลากิจ";
             sendNotification(lr.getStudentId(), lr.getClassId(), "info",
                     "✅ ใบ" + leaveLabel + "ได้รับการอนุมัติแล้ว",
@@ -155,6 +204,14 @@ public class LeaveRequestController {
     // ==========================================
     // PUT /api/leave-requests/{id}/reject — ปฏิเสธใบลา
     // ==========================================
+
+    /**
+     * อาจารย์กด "ปฏิเสธ" (Reject) ใบลาของนักศึกษา
+     * ถ้าอาจารย์ปฏิเสธ ระบบจะบันทึกในสมุดจดชื่อว่าวันนั้น "ขาดเรียน"
+     *
+     * @param id รหัส UUID ของใบลา
+     * @return ผลลัพธ์ว่าสลับสถานะสำเร็จมั้ย
+     */
     @PutMapping("/{id}/reject")
     public ResponseEntity<?> rejectLeaveRequest(@PathVariable UUID id) {
         try {
@@ -164,16 +221,18 @@ public class LeaveRequestController {
             }
 
             LeaveRequest lr = opt.get();
+            
+            // 1. เปลี่ยนสถานะใบลาเป็น "ไม่อนุมัติ"
             lr.setStatus("rejected");
             lr.setUpdatedAt(LocalDateTime.now());
             leaveRequestRepository.save(lr);
 
-            // บันทึกสถานะ "absent" ลงใน Attendance เพื่อให้แสดงว่า "ขาดเรียน"
+            // 2. บันทึกสถานะ "absent" ลงในตารางจดชื่อ Attendance เพื่อให้แสดงว่า "ขาดเรียน"
             Attendance attendance = findOrCreateAttendance(lr);
             attendance.setStatus("absent");
             attendanceRepository.save(attendance);
 
-            // ส่ง Notification แจ้งนักศึกษา
+            // 3. แจ้งเตือนกระดิ่ง (Notification) ไปหานักศึกษา แบบสีแดง (danger)
             String leaveLabel = lr.getLeaveType().equals("sick") ? "ลาป่วย" : "ลากิจ";
             sendNotification(lr.getStudentId(), lr.getClassId(), "danger",
                     "❌ ใบ" + leaveLabel + "ถูกปฏิเสธ",
@@ -189,6 +248,13 @@ public class LeaveRequestController {
     // ==========================================
     // DELETE /api/leave-requests/{id} — ลบใบลา
     // ==========================================
+
+    /**
+     * ลบใบลาฉบับนีออกจากระบบถาวร (ไม่มีการเก็บไว้ใน Recycle Bin)
+     *
+     * @param id รหัส UUID ของใบลา
+     * @return ผลการดึงใบลาออก 
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteLeaveRequest(@PathVariable UUID id) {
         try {
