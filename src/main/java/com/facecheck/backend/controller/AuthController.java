@@ -33,8 +33,12 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
-            // ใช้ username ทั้งนักศึกษาและอาจารย์ (นักศึกษา = รหัสนักศึกษา, อาจารย์ = ตั้งเอง)
-            Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
+            // รองรับทั้ง field "username" (อาจารย์) และ "studentId" (นักศึกษา) จาก frontend
+            String loginId = request.getUsername();
+            if (loginId == null || loginId.isBlank()) {
+                loginId = request.getStudentId();
+            }
+            Optional<User> userOpt = userRepository.findByUsername(loginId);
 
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
